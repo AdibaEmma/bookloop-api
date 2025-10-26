@@ -87,7 +87,7 @@ export class ResponseInterceptor implements NestInterceptor {
 
     // Prepare safe error message for client
     let message = 'An error occurred';
-    let errorDetails = undefined;
+    let errorDetails: any = undefined;
 
     if (exception instanceof HttpException) {
       const exceptionResponse = exception.getResponse();
@@ -108,13 +108,18 @@ export class ResponseInterceptor implements NestInterceptor {
       message = 'Internal server error';
     }
 
-    response.status(status).json({
+    const errorResponse: any = {
       status: false,
       statusCode: status,
       path: request.url,
       message: message,
-      ...(errorDetails && { errors: errorDetails }),
-    });
+    };
+
+    if (errorDetails) {
+      errorResponse.errors = errorDetails;
+    }
+
+    response.status(status).json(errorResponse);
   }
 
   responseHandler(res: any, context: ExecutionContext) {
