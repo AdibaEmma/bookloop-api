@@ -10,6 +10,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
+import { OtpModule } from '../otp/otp.module';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
@@ -28,6 +29,7 @@ import { UserRole } from '../roles/entities/user-role.entity';
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User, Role, UserRole]),
+    OtpModule,
   ],
   controllers: [AuthController],
   providers: [

@@ -16,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { OtpService } from '../otp/otp.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,7 @@ export class AuthService {
     private userRoleRepository: Repository<UserRole>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private otpService: OtpService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -76,22 +78,22 @@ export class AuthService {
       await this.userRoleRepository.save(userRole);
     }
 
-    // TODO: Send OTP via SMS
-    // For now, return a mock OTP reference
-    const otpReference = `otp_${Date.now()}`;
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+    // Send OTP via SMS
+    const { reference, expiresAt } = await this.otpService.sendOTP(
+      registerDto.phone,
+      'registration',
+    );
 
     return {
       message: 'OTP sent successfully',
-      reference: otpReference,
+      reference,
       expires_at: expiresAt.toISOString(),
     };
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
-    // TODO: Verify OTP code
-    // For now, accept any 6-digit code
+    // Verify OTP code
+    await this.otpService.verifyOTP(verifyOtpDto.phone, verifyOtpDto.code);
 
     const user = await this.userRepository.findOne({
       where: { phone_number: verifyOtpDto.phone },
@@ -139,14 +141,15 @@ export class AuthService {
       throw new UnauthorizedException('Account is banned');
     }
 
-    // TODO: Send OTP for login
-    const otpReference = `otp_${Date.now()}`;
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+    // Send OTP for login
+    const { reference, expiresAt } = await this.otpService.sendOTP(
+      loginDto.phone,
+      'login',
+    );
 
     return {
       message: 'OTP sent successfully',
-      reference: otpReference,
+      reference,
       expires_at: expiresAt.toISOString(),
     };
   }
