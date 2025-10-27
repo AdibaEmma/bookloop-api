@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import databaseConfig from './config/database.config';
 import cacheConfig from './config/cache.config';
+import { DatabaseModule } from './database/database.module';
 import { RoutingModule } from './routing.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -25,24 +24,16 @@ import { ExchangesModule } from './modules/exchanges/exchanges.module';
     // Environment configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, cacheConfig],
+      load: [cacheConfig],
       envFilePath: '.env',
     }),
     // Database configuration
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        ...configService.get('database'),
-      }),
-      inject: [ConfigService],
-    }),
+    DatabaseModule,
     // Cache configuration (Redis)
     CacheModule.registerAsync({
       isGlobal: true,
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        ...configService.get('cache'),
-      }),
+      useFactory: (configService: ConfigService) =>
+        configService.get('cache'),
       inject: [ConfigService],
     }),
     // Global logger
