@@ -7,6 +7,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import type { Point } from 'geojson';
+import { UserRole } from '../../roles/entities/user-role.entity';
 
 @Entity('users')
 export class User {
@@ -121,6 +122,13 @@ export class User {
 
   @Column({ type: 'timestamp', nullable: true })
   last_login_at: Date;
+
+  // Authentication
+  @Column({ type: 'text', nullable: true })
+  refresh_token: string | null;
+
+  @OneToMany(() => UserRole, (userRole) => userRole.user)
+  roles: UserRole[];
 
   @CreateDateColumn()
   created_at: Date;
