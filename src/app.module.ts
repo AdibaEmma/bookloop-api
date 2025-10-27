@@ -5,10 +5,13 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import databaseConfig from './config/database.config';
+import { RoutingModule } from './routing.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ApiVersionInterceptor } from './common/interceptors/api-version.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { AuthModule } from './modules/auth/auth.module';
+import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { BooksModule } from './modules/books/books.module';
 import { ListingsModule } from './modules/listings/listings.module';
@@ -33,10 +36,14 @@ import { ExchangesModule } from './modules/exchanges/exchanges.module';
     // Global logger
     LoggerModule,
     // Feature modules
+    AuthModule,
+    RolesModule,
     UsersModule,
     BooksModule,
     ListingsModule,
     ExchangesModule,
+    // Routing (must be last)
+    RoutingModule,
   ],
   controllers: [AppController],
   providers: [
