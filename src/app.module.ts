@@ -18,6 +18,8 @@ import { UsersModule } from './modules/users/users.module';
 import { BooksModule } from './modules/books/books.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { ExchangesModule } from './modules/exchanges/exchanges.module';
+import { AppDataSource } from './database/data-source';
+import { DataSource } from 'typeorm';
 
 @Module({
   imports: [
@@ -27,18 +29,19 @@ import { ExchangesModule } from './modules/exchanges/exchanges.module';
       load: [cacheConfig],
       envFilePath: '.env',
     }),
-    // Database configuration
-    DatabaseModule,
     // Cache configuration (Redis)
     CacheModule.registerAsync({
+      imports: [ConfigModule],
       isGlobal: true,
-      useFactory: (configService: ConfigService) =>
-        configService.get('cache'),
+      useFactory: (configService: ConfigService) => configService.get('cache'),
       inject: [ConfigService],
     }),
     // Global logger
     LoggerModule,
     // Feature modules
+    // Database configuration
+    DatabaseModule,
+    RoutingModule,
     AuthModule,
     OtpModule,
     RolesModule,
@@ -46,12 +49,14 @@ import { ExchangesModule } from './modules/exchanges/exchanges.module';
     BooksModule,
     ListingsModule,
     ExchangesModule,
-    // Routing (must be last)
-    RoutingModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: DataSource,
+      useFactory: () => AppDataSource,
+    },
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
