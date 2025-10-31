@@ -1,63 +1,35 @@
-import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
-import * as winston from 'winston';
+import { Injectable, ConsoleLogger } from '@nestjs/common';
 
+/**
+ * Custom Logger Service using NestJS built-in ConsoleLogger
+ *
+ * Wraps NestJS ConsoleLogger to provide consistent logging across the application.
+ * Supports log levels: log, error, warn, debug, verbose
+ */
 @Injectable()
-export class LoggerService implements NestLoggerService {
-  private logger: winston.Logger;
-
+export class LoggerService extends ConsoleLogger {
   constructor() {
-    this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
-      format: winston.format.combine(
-        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        winston.format.errors({ stack: true }),
-        winston.format.splat(),
-        winston.format.json(),
-      ),
-      defaultMeta: { service: 'bookloop-api' },
-      transports: [
-        new winston.transports.File({
-          filename: 'logs/error.log',
-          level: 'error',
-        }),
-        new winston.transports.File({ filename: 'logs/combined.log' }),
-      ],
-    });
-
-    // Add console transport for development
-    if (process.env.NODE_ENV !== 'production') {
-      this.logger.add(
-        new winston.transports.Console({
-          format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.printf(({ timestamp, level, message, ...meta }) => {
-              return `${timestamp} [${level}]: ${message} ${
-                Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''
-              }`;
-            }),
-          ),
-        }),
-      );
-    }
+    super('BookLoop');
   }
 
+  // Override log method to add timestamp and context
   log(message: string, context?: string) {
-    this.logger.info(message, { context });
+    super.log(message, context || 'BookLoop');
   }
 
   error(message: string, trace?: string, context?: string) {
-    this.logger.error(message, { trace, context });
+    super.error(message, trace, context || 'BookLoop');
   }
 
   warn(message: string, context?: string) {
-    this.logger.warn(message, { context });
+    super.warn(message, context || 'BookLoop');
   }
 
   debug(message: string, context?: string) {
-    this.logger.debug(message, { context });
+    super.debug(message, context || 'BookLoop');
   }
 
   verbose(message: string, context?: string) {
-    this.logger.verbose(message, { context });
+    super.verbose(message, context || 'BookLoop');
   }
 }

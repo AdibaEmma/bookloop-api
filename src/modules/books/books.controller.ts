@@ -287,7 +287,7 @@ export class BooksController {
         ],
       }),
     )
-    file: Express.Multer.File,
+    file: any,
   ): Promise<BookResponseDto> {
     const book = await this.bookService.uploadCoverImage(id, file.buffer);
     return book as BookResponseDto;

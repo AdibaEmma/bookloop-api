@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { LocationService } from './location.service';
-import { IImageUploadService } from '../interfaces/image-upload.interface';
+import type { IImageUploadService } from '../interfaces/image-upload.interface';
 
 /**
  * UserService
@@ -277,7 +277,7 @@ export class UserService {
 
     // Update user
     await this.userRepository.update(userId, {
-      profile_picture: null,
+      profile_picture: undefined,
     });
 
     return this.findById(userId);

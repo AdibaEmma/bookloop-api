@@ -7,8 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Book } from '../entities/book.entity';
-import { IBookMetadataProvider } from '../interfaces/book-metadata-provider.interface';
-import { IImageUploadService } from '../../users/interfaces/image-upload.interface';
+import type { IBookMetadataProvider } from '../interfaces/book-metadata-provider.interface';
+import type { IImageUploadService } from '../../users/interfaces/image-upload.interface';
 
 /**
  * BookService

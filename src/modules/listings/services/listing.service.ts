@@ -10,7 +10,7 @@ import { Repository } from 'typeorm';
 import type { Point } from 'geojson';
 import { Listing } from '../entities/listing.entity';
 import { BookService } from '../../books/services/book.service';
-import { IImageUploadService } from '../../users/interfaces/image-upload.interface';
+import type { IImageUploadService } from '../../users/interfaces/image-upload.interface';
 import { ConfigService } from '@nestjs/config';
 
 /**

@@ -18,6 +18,7 @@ import { UsersModule } from './modules/users/users.module';
 import { BooksModule } from './modules/books/books.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { ExchangesModule } from './modules/exchanges/exchanges.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AppDataSource } from './database/data-source';
 import { DataSource } from 'typeorm';
 
@@ -49,6 +50,7 @@ import { DataSource } from 'typeorm';
     BooksModule,
     ListingsModule,
     ExchangesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

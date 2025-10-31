@@ -172,7 +172,7 @@ export class UsersController {
         ],
       }),
     )
-    file: Express.Multer.File,
+    file: any,
   ): Promise<UserResponseDto> {
     const updatedUser = await this.userService.uploadProfilePicture(
       user.id,

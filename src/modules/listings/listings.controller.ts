@@ -136,7 +136,7 @@ export class ListingsController {
   async uploadImages(
     @Param('id') id: string,
     @CurrentUser() user: User,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: any[],
   ) {
     const buffers = files.map((file) => file.buffer);
     return this.listingService.uploadImages(id, user.id, buffers);
