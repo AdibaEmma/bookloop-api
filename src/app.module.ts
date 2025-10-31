@@ -19,6 +19,7 @@ import { BooksModule } from './modules/books/books.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { ExchangesModule } from './modules/exchanges/exchanges.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MeetupSpotsModule } from './modules/meetup-spots/meetup-spots.module';
 import { AppDataSource } from './database/data-source';
 import { DataSource } from 'typeorm';
 
@@ -51,6 +52,7 @@ import { DataSource } from 'typeorm';
     ListingsModule,
     ExchangesModule,
     NotificationsModule,
+    MeetupSpotsModule,
   ],
   controllers: [AppController],
   providers: [
