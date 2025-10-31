@@ -20,6 +20,7 @@ import { ListingsModule } from './modules/listings/listings.module';
 import { ExchangesModule } from './modules/exchanges/exchanges.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MeetupSpotsModule } from './modules/meetup-spots/meetup-spots.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { AppDataSource } from './database/data-source';
 import { DataSource } from 'typeorm';
 
@@ -53,6 +54,7 @@ import { DataSource } from 'typeorm';
     ExchangesModule,
     NotificationsModule,
     MeetupSpotsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [
