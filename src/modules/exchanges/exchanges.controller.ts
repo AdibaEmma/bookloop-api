@@ -62,6 +62,34 @@ export class ExchangesController {
   }
 
   /**
+   * Get incoming exchange requests (as owner)
+   */
+  @Get('incoming')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get incoming exchange requests' })
+  @ApiResponse({ status: 200, description: 'Incoming exchanges retrieved' })
+  async getIncomingRequests(
+    @CurrentUser() user: User,
+    @Query('status') status?: string,
+  ) {
+    return this.exchangeService.findByUser(user.id, 'owner', status);
+  }
+
+  /**
+   * Get outgoing exchange requests (as requester)
+   */
+  @Get('my-requests')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get my exchange requests' })
+  @ApiResponse({ status: 200, description: 'My requests retrieved' })
+  async getMyRequests(
+    @CurrentUser() user: User,
+    @Query('status') status?: string,
+  ) {
+    return this.exchangeService.findByUser(user.id, 'requester', status);
+  }
+
+  /**
    * Get exchange by ID
    */
   @Get(':id')
