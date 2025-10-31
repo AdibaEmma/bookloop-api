@@ -117,6 +117,36 @@ export class BooksController {
   }
 
   /**
+   * Get popular books (most listed)
+   *
+   * GET /books/popular
+   */
+  @Get('popular')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get popular books',
+    description: 'Returns books ordered by number of listings (most popular first)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Maximum number of books to return',
+    example: 10,
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Popular books retrieved successfully',
+    type: [BookResponseDto],
+  })
+  async getPopular(@Query('limit') limit?: number): Promise<BookResponseDto[]> {
+    const books = await this.bookService.getPopular(
+      limit ? parseInt(limit.toString(), 10) : 10,
+    );
+    return books as BookResponseDto[];
+  }
+
+  /**
    * Get book by ID
    *
    * GET /books/:id

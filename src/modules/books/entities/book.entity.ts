@@ -4,7 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Listing } from '../../listings/entities/listing.entity';
 
 @Entity('books')
 export class Book {
@@ -47,6 +49,10 @@ export class Book {
   // Google Books API ID (for metadata enrichment)
   @Column({ type: 'varchar', length: 50, nullable: true })
   google_books_id: string;
+
+  // Relations
+  @OneToMany(() => Listing, (listing) => listing.book)
+  listings: Listing[];
 
   @CreateDateColumn()
   created_at: Date;

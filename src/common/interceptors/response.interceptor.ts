@@ -51,7 +51,6 @@ export class ResponseInterceptor implements NestInterceptor {
 
   errorHandler(exception: HttpException, context: ExecutionContext) {
     const ctx = context.switchToHttp();
-    const response = ctx.getResponse();
     const request = ctx.getRequest();
 
     const status =
@@ -85,41 +84,9 @@ export class ResponseInterceptor implements NestInterceptor {
       Sentry.captureException(exception);
     });
 
-    // Prepare safe error message for client
-    let message = 'An error occurred';
-    let errorDetails: any = undefined;
-
-    if (exception instanceof HttpException) {
-      const exceptionResponse = exception.getResponse();
-      if (typeof exceptionResponse === 'string') {
-        message = exceptionResponse;
-      } else if (
-        typeof exceptionResponse === 'object' &&
-        exceptionResponse !== null
-      ) {
-        message = (exceptionResponse as any).message || exception.message;
-        // Only include validation errors, not full exception details
-        if ((exceptionResponse as any).errors) {
-          errorDetails = (exceptionResponse as any).errors;
-        }
-      }
-    } else if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
-      // Don't expose internal error details to client
-      message = 'Internal server error';
-    }
-
-    const errorResponse: any = {
-      status: false,
-      statusCode: status,
-      path: request.url,
-      message: message,
-    };
-
-    if (errorDetails) {
-      errorResponse.errors = errorDetails;
-    }
-
-    response.status(status).json(errorResponse);
+    // Don't send response here - let the exception filter handle it
+    // Just re-throw the exception
+    return exception;
   }
 
   responseHandler(res: any, context: ExecutionContext) {

@@ -384,6 +384,26 @@ export class BookService {
   }
 
   /**
+   * Get popular books (books with most listings)
+   *
+   * @param limit - Number of books to return
+   * @returns Popular books
+   */
+  async getPopular(limit: number = 10): Promise<Book[]> {
+    const books = await this.bookRepository
+      .createQueryBuilder('book')
+      .leftJoin('book.listings', 'listing')
+      .addSelect('COUNT(listing.id)', 'listing_count')
+      .groupBy('book.id')
+      .orderBy('listing_count', 'DESC')
+      .addOrderBy('book.created_at', 'DESC')
+      .limit(limit)
+      .getMany();
+
+    return books;
+  }
+
+  /**
    * Extract public_id from Cloudinary URL
    *
    * @param url - Cloudinary URL

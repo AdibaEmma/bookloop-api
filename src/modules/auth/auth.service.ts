@@ -115,6 +115,11 @@ export class AuthService {
       user_id: user.id,
       phone: user.phone_number,
       full_name: user.full_name,
+      first_name: user.first_name,
+      middle_name: user.middle_name,
+      last_name: user.last_name,
+      email: user.email,
+      profile_picture: user.profile_picture,
       role: user.roles[0]?.role.name || 'user',
       tokens,
     };
