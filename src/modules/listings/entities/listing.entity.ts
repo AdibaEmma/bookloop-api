@@ -75,10 +75,23 @@ export class Listing {
 
   @Column({
     type: 'enum',
-    enum: ['available', 'reserved', 'exchanged', 'expired', 'cancelled'],
-    default: 'available',
+    enum: [
+      'draft',
+      'available',
+      'reserved',
+      'exchanged',
+      'expired',
+      'cancelled',
+    ],
+    default: 'draft',
   })
-  status: 'available' | 'reserved' | 'exchanged' | 'expired' | 'cancelled';
+  status:
+    | 'draft'
+    | 'available'
+    | 'reserved'
+    | 'exchanged'
+    | 'expired'
+    | 'cancelled';
 
   @Column({ type: 'timestamp', nullable: true })
   expires_at: Date;
