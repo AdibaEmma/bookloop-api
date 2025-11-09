@@ -85,7 +85,7 @@ export class ListingService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + this.DEFAULT_EXPIRY_DAYS);
 
-    // Create listing
+    // Create listing (defaults to 'draft' status)
     const listing = this.listingRepository.create({
       user_id: userId,
       book_id: listingData.book_id,
@@ -98,7 +98,7 @@ export class ListingService {
       region: listingData.region,
       search_radius_km: listingData.search_radius_km || 10,
       preferred_genres: listingData.preferred_genres || [],
-      status: 'available',
+      status: 'draft',
       expires_at: expiresAt,
       views_count: 0,
       interest_count: 0,
@@ -185,6 +185,13 @@ export class ListingService {
       region: string;
       search_radius_km: number;
       preferred_genres: string[];
+      status:
+        | 'draft'
+        | 'available'
+        | 'reserved'
+        | 'exchanged'
+        | 'expired'
+        | 'cancelled';
     }>,
   ): Promise<Listing> {
     // Verify listing exists and user owns it
@@ -194,10 +201,50 @@ export class ListingService {
       throw new ForbiddenException('You do not own this listing');
     }
 
-    // Cannot update exchanged or cancelled listings
-    if (listing.status === 'exchanged' || listing.status === 'cancelled') {
+    // Status transition validation
+    if (updateData.status) {
+      const currentStatus = listing.status;
+      const newStatus = updateData.status;
+
+      // Cannot update exchanged listings - final status
+      if (currentStatus === 'exchanged') {
+        throw new BadRequestException(
+          'Cannot update exchanged listing - this status is final',
+        );
+      }
+
+      // Cannot update cancelled listings - final status
+      if (currentStatus === 'cancelled') {
+        throw new BadRequestException(
+          'Cannot update cancelled listing - this status is final',
+        );
+      }
+
+      // Validate allowed transitions
+      const allowedTransitions: Record<string, string[]> = {
+        draft: ['available', 'cancelled'],
+        available: ['draft', 'reserved', 'cancelled', 'exchanged'],
+        reserved: ['available', 'draft', 'exchanged', 'cancelled'],
+        expired: ['available', 'draft', 'cancelled'],
+      };
+
+      if (
+        !allowedTransitions[currentStatus]?.includes(newStatus) &&
+        currentStatus !== newStatus
+      ) {
+        throw new BadRequestException(
+          `Invalid status transition from ${currentStatus} to ${newStatus}`,
+        );
+      }
+    }
+
+    // Cannot update other fields on exchanged or cancelled listings
+    if (
+      (listing.status === 'exchanged' || listing.status === 'cancelled') &&
+      Object.keys(updateData).length > 0
+    ) {
       throw new BadRequestException(
-        `Cannot update ${listing.status} listing`,
+        `Cannot update ${listing.status} listing - this status is final`,
       );
     }
 
