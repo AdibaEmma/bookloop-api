@@ -18,7 +18,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService } from './services/notifications.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -27,7 +27,7 @@ import type { User } from '../users/entities/user.entity';
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('notifications')
+@Controller()
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 

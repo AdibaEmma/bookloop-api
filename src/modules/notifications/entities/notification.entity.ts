@@ -24,7 +24,7 @@ export enum NotificationType {
 }
 
 @Entity('notifications')
-@Index(['user_id', 'read'])
+@Index(['user_id', 'is_read'])
 @Index(['user_id', 'created_at'])
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
@@ -38,8 +38,8 @@ export class Notification {
   user: User;
 
   @Column({
-    type: 'enum',
-    enum: NotificationType,
+    type: 'varchar',
+    length: 50,
   })
   type: NotificationType;
 
@@ -53,7 +53,10 @@ export class Notification {
   data: Record<string, any>;
 
   @Column({ type: 'boolean', default: false })
-  read: boolean;
+  is_read: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  read_at: Date;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
