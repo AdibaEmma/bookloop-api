@@ -4,6 +4,7 @@ import { Book } from './entities/book.entity';
 import { BooksController } from './books.controller';
 import { BookService } from './services/book.service';
 import { GoogleBooksService } from './services/google-books.service';
+import { OpenLibraryService } from './services/open-library.service';
 import { UsersModule } from '../users/users.module';
 
 /**
@@ -14,6 +15,7 @@ import { UsersModule } from '../users/users.module';
  * Providers:
  * - BookService: Book business logic and FTS search
  * - GoogleBooksService: Google Books API integration (Provider pattern)
+ * - OpenLibraryService: OpenLibrary cover image fallback
  *
  * Imports:
  * - UsersModule: For IImageUploadService (cover image uploads)
@@ -27,6 +29,7 @@ import { UsersModule } from '../users/users.module';
   providers: [
     BookService,
     GoogleBooksService,
+    OpenLibraryService,
     // Provider binding for IBookMetadataProvider interface
     {
       provide: 'IBookMetadataProvider',

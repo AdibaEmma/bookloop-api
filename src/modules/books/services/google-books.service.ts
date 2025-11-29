@@ -1,5 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import {
   IBookMetadataProvider,
   BookMetadata,
@@ -49,22 +52,12 @@ export class GoogleBooksService implements IBookMetadataProvider {
       // Clean ISBN (remove hyphens and spaces)
       const cleanIsbn = isbn.replace(/[-\s]/g, '');
 
-      // Search by ISBN using Google Books API
-      const url = this.buildUrl('/volumes', {
-        q: `isbn:${cleanIsbn}`,
-        maxResults: '1',
-      });
+      // Search by ISBN using Google Books API (simple URL without API key)
+      const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`;
 
-      const response = await fetch(url);
+      this.logger.debug(`Fetching from URL: ${url}`);
 
-      if (!response.ok) {
-        this.logger.error(
-          `Google Books API error: ${response.status} ${response.statusText}`,
-        );
-        return null;
-      }
-
-      const data = await response.json();
+      const { data } = await axios.get(url);
 
       if (!data.items || data.items.length === 0) {
         this.logger.debug(`No book found for ISBN: ${isbn}`);
@@ -74,7 +67,16 @@ export class GoogleBooksService implements IBookMetadataProvider {
       // Parse first result
       return this.parseBookVolume(data.items[0]);
     } catch (error) {
-      this.logger.error(`Failed to lookup ISBN ${isbn}: ${error.message}`);
+      if (axios.isAxiosError(error)) {
+        this.logger.error(
+          `Google Books API error: ${error.response?.status} ${error.response?.statusText}`,
+        );
+        this.logger.error(
+          `Error data: ${JSON.stringify(error.response?.data)}`,
+        );
+      } else {
+        this.logger.error(`Failed to lookup ISBN ${isbn}: ${error.message}`);
+      }
       return null;
     }
   }
@@ -110,16 +112,7 @@ export class GoogleBooksService implements IBookMetadataProvider {
 
       const url = this.buildUrl('/volumes', params);
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        this.logger.error(
-          `Google Books API error: ${response.status} ${response.statusText}`,
-        );
-        return [];
-      }
-
-      const data = await response.json();
+      const { data } = await axios.get(url);
 
       if (!data.items || data.items.length === 0) {
         return [];
@@ -128,7 +121,13 @@ export class GoogleBooksService implements IBookMetadataProvider {
       // Parse all results
       return data.items.map((item: any) => this.parseBookVolume(item));
     } catch (error) {
-      this.logger.error(`Failed to search books: ${error.message}`);
+      if (axios.isAxiosError(error)) {
+        this.logger.error(
+          `Google Books API error: ${error.response?.status} ${error.response?.statusText}`,
+        );
+      } else {
+        this.logger.error(`Failed to search books: ${error.message}`);
+      }
       return [];
     }
   }
@@ -220,15 +219,29 @@ export class GoogleBooksService implements IBookMetadataProvider {
     }
 
     // Get best quality cover image
+    // Best, safe cover image
     let coverImage: string | undefined;
+
     if (volumeInfo.imageLinks) {
-      // Prefer larger images, remove zoom=1 parameter for higher quality
-      coverImage = (
-        volumeInfo.imageLinks.large ||
-        volumeInfo.imageLinks.medium ||
-        volumeInfo.imageLinks.thumbnail ||
-        volumeInfo.imageLinks.smallThumbnail
-      )?.replace('&edge=curl', '').replace('zoom=1', 'zoom=0');
+      const links = volumeInfo.imageLinks;
+
+      coverImage =
+        links.extraLarge ||
+        links.large ||
+        links.medium ||
+        links.thumbnail ||
+        links.smallThumbnail ||
+        undefined;
+
+      if (coverImage) {
+        // Always enforce HTTPS
+        coverImage = coverImage.replace('http://', 'https://');
+
+        // Optional safe upscale (zoom=1→zoom=2)
+        if (coverImage.includes('zoom=')) {
+          coverImage = coverImage.replace(/zoom=\d/, 'zoom=2');
+        }
+      }
     }
 
     // Extract primary genre from categories
@@ -262,19 +275,19 @@ export class GoogleBooksService implements IBookMetadataProvider {
     try {
       const url = this.buildUrl(`/volumes/${volumeId}`, {});
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
+      const { data } = await axios.get(url);
 
       return this.parseBookVolume(data);
     } catch (error) {
-      this.logger.error(
-        `Failed to get book by ID ${volumeId}: ${error.message}`,
-      );
+      if (axios.isAxiosError(error)) {
+        this.logger.error(
+          `Google Books API error: ${error.response?.status} ${error.response?.statusText}`,
+        );
+      } else {
+        this.logger.error(
+          `Failed to get book by ID ${volumeId}: ${error.message}`,
+        );
+      }
       return null;
     }
   }

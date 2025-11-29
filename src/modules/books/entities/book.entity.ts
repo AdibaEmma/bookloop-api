@@ -13,7 +13,7 @@ export class Book {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 13, nullable: true })
+  @Column({ type: 'varchar', length: 13, nullable: true, unique: true })
   isbn: string;
 
   @Column({ type: 'varchar', length: 255 })

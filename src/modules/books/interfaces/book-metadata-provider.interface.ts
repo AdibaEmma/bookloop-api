@@ -116,4 +116,12 @@ export interface IBookMetadataProvider {
    * @returns Provider name (e.g., "Google Books", "Open Library")
    */
   getProviderName(): string;
+
+  /**
+   * Get book metadata by provider-specific ID
+   *
+   * @param volumeId - Provider-specific book ID (e.g., Google Books volume ID)
+   * @returns Book metadata or null if not found
+   */
+  getBookById?(volumeId: string): Promise<BookMetadata | null>;
 }

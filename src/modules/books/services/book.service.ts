@@ -3,12 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Book } from '../entities/book.entity';
 import type { IBookMetadataProvider } from '../interfaces/book-metadata-provider.interface';
 import type { IImageUploadService } from '../../users/interfaces/image-upload.interface';
+import { OpenLibraryService } from './open-library.service';
 
 /**
  * BookService
@@ -28,6 +30,8 @@ import type { IImageUploadService } from '../../users/interfaces/image-upload.in
  */
 @Injectable()
 export class BookService {
+  private readonly logger = new Logger(BookService.name);
+
   constructor(
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
@@ -35,6 +39,7 @@ export class BookService {
     private readonly metadataProvider: IBookMetadataProvider,
     @Inject('IImageUploadService')
     private readonly imageUploadService: IImageUploadService,
+    private readonly openLibraryService: OpenLibraryService,
   ) {}
 
   /**
@@ -72,7 +77,14 @@ export class BookService {
 
   /**
    * Create book from ISBN lookup
-   * Automatically fetches metadata from Google Books
+   *
+   * Implements intelligent caching flow:
+   * 1. Check database cache (existing books)
+   * 2. If not found, lookup Google Books for metadata
+   * 3. Use Google Books cover if available, otherwise try OpenLibrary fallback
+   * 4. If no cover found, use default placeholder
+   * 5. Save merged result in database cache
+   * 6. Return book metadata
    *
    * @param isbn - ISBN-10 or ISBN-13
    * @returns Created book with metadata
@@ -81,16 +93,19 @@ export class BookService {
     const cleanIsbn = this.cleanISBN(isbn);
     this.validateISBN(cleanIsbn);
 
-    // Check if book already exists
+    // Step 1: Check database cache first
+    this.logger.debug(`[1] Cache check for ISBN: ${cleanIsbn}`);
     const existingBook = await this.bookRepository.findOne({
       where: { isbn: cleanIsbn },
     });
 
     if (existingBook) {
+      this.logger.debug(`[1] Cache HIT - Returning: ${existingBook.title}`);
       return existingBook;
     }
 
-    // Lookup metadata from Google Books
+    // Step 2: Lookup from Google Books
+    this.logger.debug(`[2] Cache MISS - Looking up Google Books`);
     const metadata = await this.metadataProvider.lookupByISBN(cleanIsbn);
 
     if (!metadata) {
@@ -99,13 +114,32 @@ export class BookService {
       );
     }
 
-    // Create book with fetched metadata
+    this.logger.debug(`[2] Google Books found: ${metadata.title}`);
+
+    // Step 3: Use Google Books cover first, OpenLibrary as fallback
+    let finalCoverImage = metadata.cover_image;
+
+    if (!finalCoverImage) {
+      this.logger.debug(`[3] No Google Books cover - trying OpenLibrary fallback`);
+      const openLibraryCover = await this.openLibraryService.getCoverByISBN(cleanIsbn);
+      if (openLibraryCover) {
+        this.logger.debug(`[3] OpenLibrary cover found`);
+        finalCoverImage = openLibraryCover;
+      } else {
+        this.logger.debug(`[4] No cover available - will use default`);
+      }
+    } else {
+      this.logger.debug(`[3] Using Google Books cover`);
+    }
+
+    // Step 5: Save merged result in database cache
+    this.logger.debug(`[5] Saving to cache: ${metadata.title}`);
     const book = this.bookRepository.create({
       isbn: metadata.isbn || cleanIsbn,
       title: metadata.title,
       author: metadata.author,
       description: metadata.description,
-      cover_image: metadata.cover_image,
+      cover_image: finalCoverImage,
       publisher: metadata.publisher,
       publication_year: metadata.publication_year,
       language: metadata.language || 'English',
@@ -115,7 +149,135 @@ export class BookService {
       google_books_id: metadata.provider_id,
     });
 
-    return this.bookRepository.save(book);
+    try {
+      return await this.bookRepository.save(book);
+    } catch (error: any) {
+      // Handle race condition: if another request created the book at the same time
+      if (error.code === '23505') {
+        // PostgreSQL unique violation error code
+        this.logger.debug(
+          `[5] Race condition detected - book was created by another request. Fetching from cache...`,
+        );
+        const existingBook = await this.bookRepository.findOne({
+          where: { isbn: cleanIsbn },
+        });
+        if (existingBook) {
+          return existingBook;
+        }
+      }
+      // Re-throw any other errors
+      throw error;
+    }
+  }
+
+  /**
+   * Create book from Google Books ID
+   *
+   * Implements intelligent caching flow:
+   * 1. Check database cache by google_books_id
+   * 2. If not found, fetch from Google Books API using volume ID
+   * 3. Use Google Books cover if available, otherwise try OpenLibrary fallback
+   * 4. Save to database cache
+   * 5. Return book
+   *
+   * @param googleBooksId - Google Books volume ID (e.g., "zyTCAlFPjgYC")
+   * @param fallbackData - Fallback title/author if API lookup fails
+   * @returns Created or existing book
+   */
+  async createFromGoogleBooksId(
+    googleBooksId: string,
+    fallbackData?: { title?: string; author?: string },
+  ): Promise<Book> {
+    // Step 1: Check database cache by google_books_id
+    this.logger.debug(`[1] Cache check for Google Books ID: ${googleBooksId}`);
+    const existingBook = await this.bookRepository.findOne({
+      where: { google_books_id: googleBooksId },
+    });
+
+    if (existingBook) {
+      this.logger.debug(`[1] Cache HIT - Returning: ${existingBook.title}`);
+      return existingBook;
+    }
+
+    // Step 2: Fetch from Google Books API using volume ID
+    this.logger.debug(`[2] Cache MISS - Fetching from Google Books API`);
+
+    // Check if provider supports getBookById
+    if (!this.metadataProvider.getBookById) {
+      throw new BadRequestException(
+        'Metadata provider does not support lookup by volume ID',
+      );
+    }
+
+    const metadata = await this.metadataProvider.getBookById(googleBooksId);
+
+    if (!metadata) {
+      // Use fallback data if provided
+      if (fallbackData?.title && fallbackData?.author) {
+        this.logger.debug(`[2] API lookup failed - using fallback data`);
+        const book = this.bookRepository.create({
+          title: fallbackData.title,
+          author: fallbackData.author,
+          google_books_id: googleBooksId,
+        });
+        return this.bookRepository.save(book);
+      }
+
+      throw new NotFoundException(
+        `Book not found for Google Books ID: ${googleBooksId}`,
+      );
+    }
+
+    this.logger.debug(`[2] Google Books found: ${metadata.title}`);
+
+    // Step 3: Use Google Books cover, OpenLibrary as fallback
+    let finalCoverImage = metadata.cover_image;
+
+    if (!finalCoverImage && metadata.isbn) {
+      this.logger.debug(`[3] No Google Books cover - trying OpenLibrary fallback`);
+      const openLibraryCover = await this.openLibraryService.getCoverByISBN(
+        metadata.isbn,
+      );
+      if (openLibraryCover) {
+        this.logger.debug(`[3] OpenLibrary cover found`);
+        finalCoverImage = openLibraryCover;
+      }
+    }
+
+    // Step 4: Save to database cache
+    this.logger.debug(`[4] Saving to cache: ${metadata.title}`);
+    const book = this.bookRepository.create({
+      isbn: metadata.isbn,
+      title: metadata.title,
+      author: metadata.author,
+      description: metadata.description,
+      cover_image: finalCoverImage,
+      publisher: metadata.publisher,
+      publication_year: metadata.publication_year,
+      language: metadata.language || 'English',
+      pages: metadata.pages,
+      genre: metadata.genre,
+      categories: metadata.categories,
+      google_books_id: googleBooksId,
+    });
+
+    try {
+      return await this.bookRepository.save(book);
+    } catch (error: any) {
+      // Handle race condition
+      if (error.code === '23505') {
+        this.logger.debug(
+          `[4] Race condition - fetching existing book from cache`,
+        );
+        const cachedBook = await this.bookRepository.findOne({
+          where: { google_books_id: googleBooksId },
+        });
+        if (cachedBook) {
+          return cachedBook;
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -179,6 +341,21 @@ export class BookService {
 
     const limit = Math.min(options?.limit || 20, 100); // Cap at 100
     const offset = options?.offset || 0;
+
+    // First check if query is an ISBN (all digits, 10 or 13 chars)
+    const cleanQuery = query.replace(/[-\s]/g, '');
+    const isISBN = /^\d{10}(\d{3})?$/.test(cleanQuery);
+
+    if (isISBN) {
+      // Direct ISBN search for exact match
+      const book = await this.bookRepository.findOne({
+        where: { isbn: cleanQuery },
+      });
+
+      if (book) {
+        return { books: [book], total: 1 };
+      }
+    }
 
     // Build full-text search query
     let queryBuilder = this.bookRepository
@@ -398,6 +575,24 @@ export class BookService {
       .orderBy('listing_count', 'DESC')
       .addOrderBy('book.created_at', 'DESC')
       .limit(limit)
+      .getMany();
+
+    return books;
+  }
+
+  /**
+   * Get user's books (from their listings)
+   *
+   * @param userId - User ID
+   * @returns Unique books from user's listings
+   */
+  async getUserBooks(userId: string): Promise<Book[]> {
+    const books = await this.bookRepository
+      .createQueryBuilder('book')
+      .innerJoin('book.listings', 'listing')
+      .where('listing.user_id = :userId', { userId })
+      .groupBy('book.id')
+      .orderBy('book.created_at', 'DESC')
       .getMany();
 
     return books;

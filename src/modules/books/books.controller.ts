@@ -28,6 +28,7 @@ import {
 import { BookService } from './services/book.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { CreateBookFromISBNDto } from './dto/create-book-from-isbn.dto';
+import { CreateBookFromGoogleDto } from './dto/create-book-from-google.dto';
 import { SearchBookDto } from './dto/search-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import {
@@ -35,6 +36,7 @@ import {
   SearchBooksResponseDto,
 } from './dto/book-response.dto';
 import { Public } from '../auth/decorators/public.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 /**
  * BookController
@@ -114,6 +116,67 @@ export class BooksController {
       createBookFromISBNDto.isbn,
     );
     return book as BookResponseDto;
+  }
+
+  /**
+   * Create a book from Google Books ID
+   *
+   * POST /books/from-google
+   *
+   * Creates a book using Google Books API metadata.
+   * Returns existing book if already cached by google_books_id.
+   */
+  @Post('from-google')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create book from Google Books ID',
+    description:
+      'Creates a book using Google Books metadata. Returns existing book if already cached.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Book created from Google Books',
+    type: BookResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Book not found in Google Books',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid Google Books ID',
+  })
+  async createFromGoogleBooks(
+    @Body() dto: CreateBookFromGoogleDto,
+  ): Promise<BookResponseDto> {
+    const book = await this.bookService.createFromGoogleBooksId(
+      dto.googleBooksId,
+      { title: dto.title, author: dto.author },
+    );
+    return book as BookResponseDto;
+  }
+
+  /**
+   * Get user's books (from their listings)
+   *
+   * GET /books/my-books
+   */
+  @Get('my-books')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get user\'s books',
+    description: 'Returns unique books from all of the user\'s listings',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User books retrieved successfully',
+    type: [BookResponseDto],
+  })
+  async getMyBooks(@CurrentUser('id') userId: string): Promise<BookResponseDto[]> {
+    const books = await this.bookService.getUserBooks(userId);
+    return books as BookResponseDto[];
   }
 
   /**
