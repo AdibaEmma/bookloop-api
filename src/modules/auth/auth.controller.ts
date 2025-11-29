@@ -47,14 +47,13 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request OTP for login' })
+  @ApiOperation({ summary: 'Login with password or request OTP' })
   @ApiResponse({
     status: 200,
-    description: 'OTP sent successfully',
-    type: OtpSentResponseDto,
+    description: 'Login successful with tokens or OTP sent',
   })
   @ApiResponse({ status: 401, description: 'User not found or not verified' })
-  async login(@Body() loginDto: LoginDto): Promise<OtpSentResponseDto> {
+  async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto | OtpSentResponseDto> {
     return this.authService.login(loginDto);
   }
 

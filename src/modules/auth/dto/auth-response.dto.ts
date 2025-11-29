@@ -40,10 +40,42 @@ export class AuthResponseDto {
   phone: string;
 
   @ApiProperty({
+    description: 'User email address',
+    example: 'kwame@example.com',
+  })
+  email: string;
+
+  @ApiProperty({
     description: 'User full name',
     example: 'Kwame Kofi Mensah',
   })
   full_name: string;
+
+  @ApiProperty({
+    description: 'User first name',
+    example: 'Kwame',
+  })
+  first_name: string;
+
+  @ApiProperty({
+    description: 'User middle name',
+    example: 'Kofi',
+    required: false,
+  })
+  middle_name: string;
+
+  @ApiProperty({
+    description: 'User last name',
+    example: 'Mensah',
+  })
+  last_name: string;
+
+  @ApiProperty({
+    description: 'User profile picture URL',
+    example: 'https://example.com/profile.jpg',
+    required: false,
+  })
+  profile_picture: string;
 
   @ApiProperty({
     description: 'User role',

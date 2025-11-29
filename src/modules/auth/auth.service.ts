@@ -33,33 +33,39 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    // Check if user already exists
-    const existingUser = await this.userRepository.findOne({
+    // Check if email already exists
+    const existingEmail = await this.userRepository.findOne({
+      where: { email: registerDto.email },
+    });
+
+    if (existingEmail) {
+      throw new ConflictException('Email already registered');
+    }
+
+    // Check if phone number already exists
+    const existingPhone = await this.userRepository.findOne({
       where: { phone_number: registerDto.phone },
     });
 
-    if (existingUser) {
+    if (existingPhone) {
       throw new ConflictException('Phone number already registered');
     }
 
-    // Check email if provided
-    if (registerDto.email) {
-      const existingEmail = await this.userRepository.findOne({
-        where: { email: registerDto.email },
-      });
-
-      if (existingEmail) {
-        throw new ConflictException('Email already registered');
-      }
+    // Hash password if provided
+    let hashedPassword: string | undefined;
+    if (registerDto.password) {
+      hashedPassword = await bcrypt.hash(registerDto.password, 10);
     }
 
     // Create new user
     const user = this.userRepository.create({
+      email: registerDto.email,
       phone_number: registerDto.phone,
+      password: hashedPassword,
       first_name: registerDto.first_name,
       middle_name: registerDto.middle_name,
       last_name: registerDto.last_name,
-      email: registerDto.email,
+      email_verified: false,
       phone_verified: false,
     });
 
@@ -78,14 +84,14 @@ export class AuthService {
       await this.userRoleRepository.save(userRole);
     }
 
-    // Send OTP via SMS
+    // Send OTP via email
     const { reference, expiresAt } = await this.otpService.sendOTP(
-      registerDto.phone,
+      registerDto.email,
       'registration',
     );
 
     return {
-      message: 'OTP sent successfully',
+      message: 'OTP sent to your email for verification',
       reference,
       expires_at: expiresAt.toISOString(),
     };
@@ -93,10 +99,10 @@ export class AuthService {
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
     // Verify OTP code
-    await this.otpService.verifyOTP(verifyOtpDto.phone, verifyOtpDto.code);
+    await this.otpService.verifyOTP(verifyOtpDto.email, verifyOtpDto.code);
 
     const user = await this.userRepository.findOne({
-      where: { phone_number: verifyOtpDto.phone },
+      where: { email: verifyOtpDto.email },
       relations: ['roles', 'roles.role'],
     });
 
@@ -104,8 +110,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Mark phone as verified
-    user.phone_verified = true;
+    // Mark email as verified
+    user.email_verified = true;
     await this.userRepository.save(user);
 
     // Generate tokens
@@ -114,11 +120,11 @@ export class AuthService {
     return {
       user_id: user.id,
       phone: user.phone_number,
+      email: user.email,
       full_name: user.full_name,
       first_name: user.first_name,
       middle_name: user.middle_name,
       last_name: user.last_name,
-      email: user.email,
       profile_picture: user.profile_picture,
       role: user.roles[0]?.role.name || 'user',
       tokens,
@@ -127,15 +133,16 @@ export class AuthService {
 
   async login(loginDto: LoginDto) {
     const user = await this.userRepository.findOne({
-      where: { phone_number: loginDto.phone },
+      where: { email: loginDto.email },
+      select: ['id', 'email', 'password', 'email_verified', 'is_active', 'is_banned'],
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!user.phone_verified) {
-      throw new UnauthorizedException('Phone number not verified');
+    if (!user.email_verified) {
+      throw new UnauthorizedException('Email not verified');
     }
 
     if (!user.is_active) {
@@ -146,14 +153,58 @@ export class AuthService {
       throw new UnauthorizedException('Account is banned');
     }
 
-    // Send OTP for login
+    // If password is provided, authenticate with password
+    if (loginDto.password) {
+      if (!user.password) {
+        throw new UnauthorizedException(
+          'Password login not available for this account. Please use OTP login.',
+        );
+      }
+
+      const isPasswordValid = await bcrypt.compare(
+        loginDto.password,
+        user.password,
+      );
+
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Fetch user with relations for token generation
+      const fullUser = await this.userRepository.findOne({
+        where: { id: user.id },
+        relations: ['roles', 'roles.role'],
+      });
+
+      if (!fullUser) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // Generate tokens
+      const tokens = await this.generateTokens(fullUser);
+
+      return {
+        user_id: fullUser.id,
+        phone: fullUser.phone_number,
+        email: fullUser.email,
+        full_name: fullUser.full_name,
+        first_name: fullUser.first_name,
+        middle_name: fullUser.middle_name,
+        last_name: fullUser.last_name,
+        profile_picture: fullUser.profile_picture,
+        role: fullUser.roles[0]?.role.name || 'user',
+        tokens,
+      };
+    }
+
+    // If no password provided, send OTP for login
     const { reference, expiresAt } = await this.otpService.sendOTP(
-      loginDto.phone,
+      loginDto.email,
       'login',
     );
 
     return {
-      message: 'OTP sent successfully',
+      message: 'OTP sent to your email',
       reference,
       expires_at: expiresAt.toISOString(),
     };
@@ -192,13 +243,13 @@ export class AuthService {
   private async generateTokens(user: User) {
     const accessPayload: JwtPayload = {
       sub: user.id,
-      phone: user.phone_number,
+      email: user.email,
       type: 'access',
     };
 
     const refreshPayload: JwtPayload = {
       sub: user.id,
-      phone: user.phone_number,
+      email: user.email,
       type: 'refresh',
     };
 
