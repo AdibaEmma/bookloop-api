@@ -56,6 +56,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   email_verified: boolean;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  password: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   profile_picture: string;
 

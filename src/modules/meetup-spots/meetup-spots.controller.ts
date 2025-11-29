@@ -28,7 +28,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Meetup Spots')
-@Controller('meetup-spots')
+@Controller()
 export class MeetupSpotsController {
   constructor(private readonly meetupSpotsService: MeetupSpotsService) {}
 

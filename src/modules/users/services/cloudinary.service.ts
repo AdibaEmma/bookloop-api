@@ -59,8 +59,11 @@ export class CloudinaryService implements IImageUploadService {
         );
       }
 
+      // Detect MIME type from buffer
+      const mimeType = this.detectMimeType(buffer);
+
       // Convert buffer to base64 for Cloudinary upload
-      const base64Data = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+      const base64Data = `data:${mimeType};base64,${buffer.toString('base64')}`;
 
       return await this.uploadImageFromBase64(base64Data, options);
     } catch (error) {
@@ -274,5 +277,33 @@ export class CloudinaryService implements IImageUploadService {
       allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
       max_file_size: 5 * 1024 * 1024, // 5MB
     });
+  }
+
+  /**
+   * Detect MIME type from buffer using magic numbers
+   *
+   * @param buffer - Image buffer
+   * @returns MIME type string
+   */
+  private detectMimeType(buffer: Buffer): string {
+    // Check magic numbers (file signatures)
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      return 'image/jpeg';
+    }
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      return 'image/png';
+    }
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+      // RIFF format - check if it's WebP
+      if (buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+        return 'image/webp';
+      }
+    }
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+      return 'image/gif';
+    }
+
+    // Default to JPEG if unknown
+    return 'image/jpeg';
   }
 }

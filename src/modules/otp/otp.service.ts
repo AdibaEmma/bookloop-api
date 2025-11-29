@@ -9,16 +9,14 @@ import { Repository, LessThan } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { LoggerService } from '../../common/logger/logger.service';
 import { OtpVerification } from './entities/otp-verification.entity';
-import { IOTPProvider } from './interfaces/otp-provider.interface';
-import { HubtelOTPProvider } from './providers/hubtel-otp.provider';
-import { TermiiOTPProvider } from './providers/termii-otp.provider';
-import { MockOTPProvider } from './providers/mock-otp.provider';
+import { OtpEmailJob } from '../../common/queues/otp-email.processor';
 
 @Injectable()
 export class OtpService {
-  private readonly providers: IOTPProvider[];
   private readonly otpExpiryMinutes: number;
   private readonly maxAttempts: number;
   private readonly resendCooldownSeconds: number;
@@ -28,11 +26,10 @@ export class OtpService {
     private otpRepository: Repository<OtpVerification>,
     @Inject(CACHE_MANAGER)
     private cacheManager: Cache,
+    @InjectQueue('otpEmail')
+    private otpEmailQueue: Queue<OtpEmailJob>,
     private configService: ConfigService,
     private logger: LoggerService,
-    private hubtelProvider: HubtelOTPProvider,
-    private termiiProvider: TermiiOTPProvider,
-    private mockProvider: MockOTPProvider,
   ) {
     // Configuration
     this.otpExpiryMinutes =
@@ -44,95 +41,83 @@ export class OtpService {
       parseInt(
         this.configService.get<string>('OTP_RESEND_COOLDOWN_SECONDS') || '60',
       ) || 60;
-
-    // Set up provider fallback chain
-    const env = this.configService.get<string>('NODE_ENV');
-    if (env === 'development' || env === 'test') {
-      this.providers = [this.mockProvider];
-    } else {
-      // Production: Hubtel -> Termii fallback
-      this.providers = [this.hubtelProvider, this.termiiProvider];
-    }
   }
 
   /**
-   * Generate and send OTP
+   * Generate and send OTP via email
    */
   async sendOTP(
-    phone: string,
+    email: string,
     purpose:
       | 'registration'
       | 'login'
       | 'password_reset'
-      | 'phone_verification',
+      | 'email_verification',
   ): Promise<{ reference: string; expiresAt: Date }> {
     // Check rate limiting
-    await this.checkRateLimit(phone);
+    await this.checkRateLimit(email);
 
-    // Generate 6-digit code
+    // Generate alphanumeric code (6-8 characters)
     const code = this.generateOTPCode();
 
-    // Try providers with fallback
-    let lastError: Error | null = null;
-    for (const provider of this.providers) {
-      try {
-        const result = await provider.sendOTP(phone, code);
+    // Calculate expiry
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + this.otpExpiryMinutes);
 
-        // Save OTP to database
-        const otp = this.otpRepository.create({
-          phone,
-          code,
-          reference: result.reference,
-          provider: provider.getProviderName(),
-          expires_at: result.expiresAt,
-          purpose,
-          attempts: 0,
-          verified: false,
-        });
+    // Generate reference
+    const reference = `otp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-        await this.otpRepository.save(otp);
+    try {
+      // Save OTP to database
+      const otp = this.otpRepository.create({
+        email,
+        code,
+        reference,
+        provider: 'email',
+        expires_at: expiresAt,
+        purpose,
+        attempts: 0,
+        verified: false,
+      });
 
-        // Set rate limit
-        await this.setRateLimit(phone);
+      await this.otpRepository.save(otp);
 
-        this.logger.log(
-          `OTP sent to ${phone} via ${provider.getProviderName()}`,
-          'OtpService',
-        );
+      // Queue email for sending
+      await this.otpEmailQueue.add('send', {
+        email,
+        code,
+        purpose,
+      });
 
-        return {
-          reference: result.reference,
-          expiresAt: result.expiresAt,
-        };
-      } catch (error: any) {
-        this.logger.warn(
-          `Provider ${provider.getProviderName()} failed: ${error.message}`,
-          'OtpService',
-        );
-        lastError = error;
-        // Continue to next provider
-      }
+      // Set rate limit
+      await this.setRateLimit(email);
+
+      this.logger.log(`OTP queued for ${email} via email`, 'OtpService');
+
+      return {
+        reference,
+        expiresAt,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to send OTP to ${email}: ${error.message}`,
+        error.stack,
+        'OtpService',
+      );
+      throw new BadRequestException(
+        'Unable to send OTP. Please try again later.',
+      );
     }
-
-    // All providers failed
-    this.logger.error(
-      `All OTP providers failed for ${phone}`,
-      lastError?.stack,
-      'OtpService',
-    );
-    throw new BadRequestException(
-      'Unable to send OTP. Please try again later.',
-    );
   }
 
   /**
    * Verify OTP code
    */
-  async verifyOTP(phone: string, code: string): Promise<boolean> {
-    // Find the most recent OTP for this phone
+  async verifyOTP(email: string, code: string): Promise<boolean> {
+    // Find the most recent OTP for this email
     const otp = await this.otpRepository.findOne({
       where: {
-        phone,
+        email,
         code,
         verified: false,
       },
@@ -174,18 +159,18 @@ export class OtpService {
     await this.otpRepository.save(otp);
 
     // Clear rate limit
-    await this.clearRateLimit(phone);
+    await this.clearRateLimit(email);
 
-    this.logger.log(`OTP verified successfully for ${phone}`, 'OtpService');
+    this.logger.log(`OTP verified successfully for ${email}`, 'OtpService');
 
     return true;
   }
 
   /**
-   * Check if phone can request OTP (rate limiting)
+   * Check if email can request OTP (rate limiting)
    */
-  private async checkRateLimit(phone: string): Promise<void> {
-    const key = `otp:ratelimit:${phone}`;
+  private async checkRateLimit(email: string): Promise<void> {
+    const key = `otp:ratelimit:${email}`;
     const lastSent = await this.cacheManager.get<number>(key);
 
     if (lastSent) {
@@ -201,10 +186,10 @@ export class OtpService {
   }
 
   /**
-   * Set rate limit for phone
+   * Set rate limit for email
    */
-  private async setRateLimit(phone: string): Promise<void> {
-    const key = `otp:ratelimit:${phone}`;
+  private async setRateLimit(email: string): Promise<void> {
+    const key = `otp:ratelimit:${email}`;
     await this.cacheManager.set(
       key,
       Date.now(),
@@ -213,18 +198,32 @@ export class OtpService {
   }
 
   /**
-   * Clear rate limit for phone
+   * Clear rate limit for email
    */
-  private async clearRateLimit(phone: string): Promise<void> {
-    const key = `otp:ratelimit:${phone}`;
+  private async clearRateLimit(email: string): Promise<void> {
+    const key = `otp:ratelimit:${email}`;
     await this.cacheManager.del(key);
   }
 
   /**
-   * Generate 6-digit OTP code
+   * Generate alphanumeric OTP code (6 characters)
+   * Can be numeric or alphanumeric based on configuration
    */
   private generateOTPCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    const useAlphanumeric = this.configService.get<string>(
+      'OTP_USE_ALPHANUMERIC',
+    );
+
+    if (useAlphanumeric === 'true') {
+      // Generate 6-character alphanumeric code
+      return Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase();
+    } else {
+      // Generate 6-digit numeric code
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    }
   }
 
   /**

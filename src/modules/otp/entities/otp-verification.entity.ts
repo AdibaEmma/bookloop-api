@@ -11,17 +11,17 @@ export class OtpVerification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 15 })
-  phone: string;
+  @Column({ type: 'varchar', length: 255 })
+  email: string;
 
-  @Column({ type: 'varchar', length: 6 })
+  @Column({ type: 'varchar', length: 8 })
   code: string;
 
   @Column({ type: 'varchar', length: 255 })
   reference: string;
 
   @Column({ type: 'varchar', length: 50 })
-  provider: string; // hubtel, termii, africastalking
+  provider: string; // email
 
   @Column({ type: 'timestamp' })
   expires_at: Date;
@@ -37,9 +37,9 @@ export class OtpVerification {
 
   @Column({
     type: 'enum',
-    enum: ['registration', 'login', 'password_reset', 'phone_verification'],
+    enum: ['registration', 'login', 'password_reset', 'email_verification'],
   })
-  purpose: 'registration' | 'login' | 'password_reset' | 'phone_verification';
+  purpose: 'registration' | 'login' | 'password_reset' | 'email_verification';
 
   @CreateDateColumn()
   created_at: Date;
