@@ -8,6 +8,7 @@ import { RatingService } from './services/rating.service';
 import { ExchangeStateMachine } from './state-machine/exchange-state-machine.service';
 import { ListingsModule } from '../listings/listings.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 /**
  * ExchangesModule
@@ -33,6 +34,7 @@ import { UsersModule } from '../users/users.module';
     TypeOrmModule.forFeature([Exchange, Rating]),
     ListingsModule,
     UsersModule,
+    NotificationsModule,
   ],
   controllers: [ExchangesController],
   providers: [

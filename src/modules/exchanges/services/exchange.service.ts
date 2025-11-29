@@ -10,6 +10,8 @@ import type { Point } from 'geojson';
 import { Exchange } from '../entities/exchange.entity';
 import { ExchangeStateMachine } from '../state-machine/exchange-state-machine.service';
 import { ListingService } from '../../listings/services/listing.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 /**
  * ExchangeService
@@ -42,6 +44,7 @@ export class ExchangeService {
     private readonly exchangeRepository: Repository<Exchange>,
     private readonly exchangeStateMachine: ExchangeStateMachine,
     private readonly listingService: ListingService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -103,7 +106,22 @@ export class ExchangeService {
     // Increment interest count on listing
     await this.listingService.incrementInterest(requestData.listing_id);
 
-    return this.exchangeRepository.save(exchange);
+    const savedExchange = await this.exchangeRepository.save(exchange);
+
+    // Send notification to listing owner
+    await this.notificationsService.sendNotification(
+      listing.user_id,
+      NotificationType.EXCHANGE_REQUEST,
+      'New Exchange Request',
+      `Someone is interested in exchanging "${listing.book?.title || 'your book'}"`,
+      {
+        type: 'EXCHANGE_REQUEST',
+        exchange_id: savedExchange.id,
+        listing_id: listing.id,
+      },
+    );
+
+    return savedExchange;
   }
 
   /**
@@ -201,7 +219,22 @@ export class ExchangeService {
       await this.listingService.markAsReserved(exchange.offered_listing_id);
     }
 
-    return this.findById(exchangeId);
+    const updatedExchange = await this.findById(exchangeId);
+
+    // Send notification to requester
+    await this.notificationsService.sendNotification(
+      exchange.requester_id,
+      NotificationType.EXCHANGE_ACCEPTED,
+      'Exchange Accepted!',
+      `Your exchange request has been accepted. Coordinate the meetup to complete the exchange.`,
+      {
+        type: 'EXCHANGE_ACCEPTED',
+        exchange_id: exchange.id,
+        listing_id: exchange.listing_id,
+      },
+    );
+
+    return updatedExchange;
   }
 
   /**
@@ -232,7 +265,22 @@ export class ExchangeService {
       exchange.owner_response = response;
     }
 
-    return this.exchangeRepository.save(exchange);
+    const savedExchange = await this.exchangeRepository.save(exchange);
+
+    // Send notification to requester
+    await this.notificationsService.sendNotification(
+      exchange.requester_id,
+      NotificationType.EXCHANGE_DECLINED,
+      'Exchange Declined',
+      response || 'Your exchange request was declined.',
+      {
+        type: 'EXCHANGE_DECLINED',
+        exchange_id: exchange.id,
+        listing_id: exchange.listing_id,
+      },
+    );
+
+    return savedExchange;
   }
 
   /**
@@ -279,7 +327,27 @@ export class ExchangeService {
       }
     }
 
-    return this.findById(exchangeId);
+    const updatedExchange = await this.findById(exchangeId);
+
+    // Notify the other party
+    const otherPartyId =
+      userId === exchange.requester_id
+        ? exchange.owner_id
+        : exchange.requester_id;
+
+    await this.notificationsService.sendNotification(
+      otherPartyId,
+      NotificationType.EXCHANGE_CANCELLED,
+      'Exchange Cancelled',
+      'An exchange you were part of has been cancelled.',
+      {
+        type: 'EXCHANGE_CANCELLED',
+        exchange_id: exchange.id,
+        listing_id: exchange.listing_id,
+      },
+    );
+
+    return updatedExchange;
   }
 
   /**
@@ -408,6 +476,32 @@ export class ExchangeService {
       if (exchange.offered_listing_id) {
         await this.listingService.markAsExchanged(exchange.offered_listing_id);
       }
+
+      // Notify both parties of successful completion
+      await Promise.all([
+        this.notificationsService.sendNotification(
+          exchange.requester_id,
+          NotificationType.EXCHANGE_COMPLETED,
+          'Exchange Completed!',
+          'Your book exchange has been completed successfully. Consider leaving a rating!',
+          {
+            type: 'EXCHANGE_COMPLETED',
+            exchange_id: exchange.id,
+            listing_id: exchange.listing_id,
+          },
+        ),
+        this.notificationsService.sendNotification(
+          exchange.owner_id,
+          NotificationType.EXCHANGE_COMPLETED,
+          'Exchange Completed!',
+          'Your book exchange has been completed successfully. Consider leaving a rating!',
+          {
+            type: 'EXCHANGE_COMPLETED',
+            exchange_id: exchange.id,
+            listing_id: exchange.listing_id,
+          },
+        ),
+      ]);
     }
 
     return this.exchangeRepository.save(exchange);

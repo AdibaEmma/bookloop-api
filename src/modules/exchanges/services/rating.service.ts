@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { Rating } from '../entities/rating.entity';
 import { Exchange } from '../entities/exchange.entity';
 import { UserService } from '../../users/services/user.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 /**
  * RatingService
@@ -43,6 +45,7 @@ export class RatingService {
     @InjectRepository(Exchange)
     private readonly exchangeRepository: Repository<Exchange>,
     private readonly userService: UserService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -145,6 +148,31 @@ export class RatingService {
       ratedUserId,
       ratingData.rating,
     );
+
+    // Send notification to the rated user (only when rating becomes visible)
+    if (rating.is_visible) {
+      const ratingText =
+        ratingData.rating === 5
+          ? 'excellent'
+          : ratingData.rating >= 4
+            ? 'great'
+            : ratingData.rating >= 3
+              ? 'good'
+              : 'feedback';
+
+      await this.notificationsService.sendNotification(
+        ratedUserId,
+        NotificationType.RATING_RECEIVED,
+        'New Rating Received',
+        `You received ${ratingText} feedback for a recent exchange!`,
+        {
+          type: 'RATING_RECEIVED',
+          rating_id: rating.id,
+          exchange_id: exchangeId,
+          rating: ratingData.rating,
+        },
+      );
+    }
 
     return rating;
   }
