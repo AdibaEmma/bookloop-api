@@ -5,6 +5,8 @@ import { UsersModule } from './modules/users/users.module';
 import { BooksModule } from './modules/books/books.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { ExchangesModule } from './modules/exchanges/exchanges.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MeetupSpotsModule } from './modules/meetup-spots/meetup-spots.module';
 
 const routes: Routes = [
   {
@@ -26,6 +28,14 @@ const routes: Routes = [
   {
     path: 'exchanges',
     module: ExchangesModule,
+  },
+  {
+    path: 'notifications',
+    module: NotificationsModule,
+  },
+  {
+    path: 'meetup-spots',
+    module: MeetupSpotsModule,
   },
 ];
 

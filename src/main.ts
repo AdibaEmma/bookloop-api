@@ -23,9 +23,12 @@ async function bootstrap() {
   app.useLogger(logger);
 
   // Enable CORS
+  const corsOrigins = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '*';
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: corsOrigins === '*' ? '*' : corsOrigins.split(',').map((origin) => origin.trim()),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Global API prefix with version

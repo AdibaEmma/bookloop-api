@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
+import { BullModule } from '@nestjs/bull';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -37,6 +38,19 @@ import { DataSource } from 'typeorm';
       imports: [ConfigModule],
       isGlobal: true,
       useFactory: (configService: ConfigService) => configService.get('cache'),
+      inject: [ConfigService],
+    }),
+    // Bull Queue configuration (Redis)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        redis: {
+          host: configService.get('REDIS_HOST') || 'localhost',
+          port: parseInt(configService.get('REDIS_PORT') || '6379'),
+          password: configService.get('REDIS_PASSWORD'),
+          db: parseInt(configService.get('REDIS_DB') || '0'),
+        },
+      }),
       inject: [ConfigService],
     }),
     // Global logger

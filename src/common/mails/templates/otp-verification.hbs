@@ -1,0 +1,232 @@
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>Email Verification - BookLoop</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style type="text/css">
+        @media screen {
+            @font-face {
+                font-family: 'Poppins';
+                font-style: normal;
+                font-weight: 400;
+                src: local('Poppins Regular'), url(https://fonts.gstatic.com/s/poppins/v20/pxiEyp8kv8JHgFVrJJfecg.woff2) format('woff2');
+            }
+
+            @font-face {
+                font-family: 'Poppins';
+                font-style: normal;
+                font-weight: 600;
+                src: local('Poppins SemiBold'), url(https://fonts.gstatic.com/s/poppins/v20/pxiByp8kv8JHgFVrLEj6Z1xlFQ.woff2) format('woff2');
+            }
+
+            @font-face {
+                font-family: 'Inter';
+                font-style: normal;
+                font-weight: 400;
+                src: local('Inter Regular'), url(https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2) format('woff2');
+            }
+        }
+
+        body,
+        table,
+        td,
+        a {
+            -ms-text-size-adjust: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        table,
+        td {
+            mso-table-rspace: 0pt;
+            mso-table-lspace: 0pt;
+        }
+
+        img {
+            -ms-interpolation-mode: bicubic;
+        }
+
+        a[x-apple-data-detectors] {
+            font-family: inherit !important;
+            font-size: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+            color: inherit !important;
+            text-decoration: none !important;
+        }
+
+        div[style*="margin: 16px 0;"] {
+            margin: 0 !important;
+        }
+
+        body {
+            width: 100% !important;
+            height: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        table {
+            border-collapse: collapse !important;
+        }
+
+        a {
+            color: #D97941;
+        }
+
+        img {
+            height: auto;
+            max-width: 100%;
+            text-decoration: none;
+            border: 0;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body style="background-color: #FAF3E0;">
+
+    <!-- start body -->
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+
+        <!-- start logo -->
+        <tr>
+            <td align="center" bgcolor="#FAF3E0">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+                    <tr>
+                        <td align="center" valign="top" style="padding: 36px 24px;">
+                            <a href="https://bookloop.gh" target="_blank" style="display: inline-block;">
+                                <img src="https://res.cloudinary.com/dojthldnc/image/upload/v1762643032/bookloop/logos/bookloop-logo_v0pf3k.png" alt="BookLoop" border="0" width="140" style="display: block; width: 140px; max-width: 100%; min-width: 120px;">
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <!-- end logo -->
+
+        <!-- start hero -->
+        <tr>
+            <td align="center" bgcolor="#FAF3E0">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3"
+                            style="padding: 36px 24px 0; font-family: 'Poppins', Helvetica, Arial, sans-serif; border-top: 3px solid #8B5E3C; border-radius: 12px 12px 0 0;">
+                            <p
+                                style="color:#2C1810; text-align:center; margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -1px; line-height: 48px;">
+                                Verify Your Email Address</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <!-- end hero -->
+
+        <!-- start copy block -->
+        <tr>
+            <td align="center" bgcolor="#FAF3E0">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+
+                    <!-- start copy -->
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3"
+                            style="padding: 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                            <p style="margin: 0;color:#2C1810;text-align:center">
+                                We are requesting you to verify your email address. Please use the verification code below:
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- end copy -->
+
+                    <!-- start button -->
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" bgcolor="#F5E6D3" style="padding: 12px;">
+                                        <table border="0" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td align="center" bgcolor="#D97941" style="border-radius: 8px;">
+                                                    <span style="display: inline-block; padding: 16px 36px;
+                                                        background-color: #D97941;
+                                                        font-family: 'Courier New', monospace;
+                                                        font-size: 32px;
+                                                        font-weight: bold;
+                                                        color: #F5E6D3;
+                                                        text-decoration: none;
+                                                        border-radius: 8px;
+                                                        letter-spacing: 8px;">{{details.code}}</span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- end button -->
+
+                    <!-- start copy -->
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3"
+                            style="padding: 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px;">
+                            <p style="margin: 0;color:#2C1810;text-align:center">
+                                This code will expire in <strong>10 minutes</strong>.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- security warning -->
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3"
+                            style="padding: 0 24px 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px;">
+                            <div style="background-color: #FFA726; border-left: 4px solid #D97941; padding: 12px; border-radius: 8px;">
+                                <p style="margin: 0; color: #2C1810;">
+                                    <strong>⚠️ Security Notice:</strong> Never share this code with anyone. BookLoop staff will never ask for your verification code.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- help text -->
+                    <tr>
+                        <td align="left" bgcolor="#F5E6D3"
+                            style="padding: 0 24px 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; border-radius: 0 0 12px 12px;">
+                            <p style="margin: 0;color:#8B7E74;text-align:center">
+                                If you didn't request this code, please ignore this email or contact our support team.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- end copy -->
+
+                </table>
+            </td>
+        </tr>
+        <!-- end copy block -->
+
+        <!-- start footer -->
+        <tr>
+            <td align="center" bgcolor="#FAF3E0" style="padding: 24px;">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
+                    <!-- start permission -->
+                    <tr>
+                        <td align="center" bgcolor="#FAF3E0"
+                            style="padding: 12px 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; color: #8B7E74;">
+                            <p style="margin: 0;">This is an automated message from BookLoop. Please do not reply to this email.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" bgcolor="#FAF3E0"
+                            style="padding: 12px 24px; font-family: 'Inter', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; color: #8B7E74;">
+                            <p style="margin: 0;">Copyright © BookLoop {{details.year}} All rights reserved.</p>
+                        </td>
+                    </tr>
+                    <!-- end permission -->
+                </table>
+            </td>
+        </tr>
+        <!-- end footer -->
+
+    </table>
+    <!-- end body -->
+
+</body>
