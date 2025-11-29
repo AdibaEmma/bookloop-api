@@ -10,15 +10,10 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-export enum DeviceType {
-  IOS = 'ios',
-  ANDROID = 'android',
-  WEB = 'web',
-}
+export type DeviceType = 'ios' | 'android' | 'web';
 
 @Entity('user_devices')
-@Index(['user_id'])
-@Index(['fcm_token'], { unique: true })
+@Index('IDX_USER_DEVICES_USER_ID', ['user_id'])
 export class UserDevice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -31,23 +26,23 @@ export class UserDevice {
   user: User;
 
   @Column({ type: 'varchar', length: 500, unique: true })
-  fcm_token: string;
+  device_token: string;
 
-  @Column({
-    type: 'enum',
-    enum: DeviceType,
-  })
+  @Column({ type: 'varchar', length: 20 })
   device_type: DeviceType;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   device_name: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
-  last_active_at: Date;
+  @Column({ type: 'boolean', default: true })
+  is_active: boolean;
 
-  @CreateDateColumn({ type: 'timestamptz' })
+  @Column({ type: 'timestamp', default: () => 'now()' })
+  last_used_at: Date;
+
+  @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 }

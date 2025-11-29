@@ -1,11 +1,11 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { DeviceType } from '../entities/user-device.entity';
+import type { DeviceType } from '../entities/user-device.entity';
 
 export class RegisterDeviceDto {
   @ApiProperty({
-    description: 'Firebase Cloud Messaging token',
-    example: 'dGhpcyBpcyBhIGZha2UgZmNtIHRva2Vu...',
+    description: 'Firebase Cloud Messaging token or Expo push token',
+    example: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
   })
   @IsNotEmpty()
   @IsString()
@@ -13,11 +13,11 @@ export class RegisterDeviceDto {
 
   @ApiProperty({
     description: 'Type of device',
-    enum: DeviceType,
-    example: DeviceType.IOS,
+    enum: ['ios', 'android', 'web'],
+    example: 'ios',
   })
   @IsNotEmpty()
-  @IsEnum(DeviceType)
+  @IsIn(['ios', 'android', 'web'])
   device_type: DeviceType;
 
   @ApiProperty({
