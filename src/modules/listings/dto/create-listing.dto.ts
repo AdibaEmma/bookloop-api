@@ -84,4 +84,14 @@ export class CreateListingDto {
   @IsArray()
   @IsString({ each: true })
   preferred_genres?: string[];
+
+  @ApiProperty({
+    description: 'Listing status (defaults to draft)',
+    enum: ['draft', 'available'],
+    required: false,
+    default: 'draft',
+  })
+  @IsOptional()
+  @IsEnum(['draft', 'available'])
+  status?: 'draft' | 'available';
 }

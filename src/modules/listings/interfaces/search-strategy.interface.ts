@@ -80,14 +80,24 @@ export interface SearchCriteria {
 
 export interface SearchResult {
   /**
-   * Array of listings
+   * Array of listings (named 'data' for consistency with mobile PaginatedResponse)
    */
-  listings: Listing[];
+  data: Listing[];
 
   /**
    * Total count (for pagination)
    */
   total: number;
+
+  /**
+   * Limit used in query
+   */
+  limit: number;
+
+  /**
+   * Offset used in query
+   */
+  offset: number;
 
   /**
    * Optional: Distance from search point (for location search)

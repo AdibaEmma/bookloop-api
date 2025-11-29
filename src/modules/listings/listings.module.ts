@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Listing } from './entities/listing.entity';
+import { ExchangePreference } from './entities/exchange-preference.entity';
 import { ListingsController } from './listings.controller';
 import { ListingService } from './services/listing.service';
 import { SearchService } from './services/search.service';
+import { ExchangePreferenceService } from './services/exchange-preference.service';
 import { LocationSearchStrategy } from './strategies/location-search.strategy';
 import { TextSearchStrategy } from './strategies/text-search.strategy';
 import { HybridSearchStrategy } from './strategies/hybrid-search.strategy';
@@ -34,7 +36,7 @@ import { UsersModule } from '../users/users.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Listing]),
+    TypeOrmModule.forFeature([Listing, ExchangePreference]),
     BooksModule,
     UsersModule,
   ],
@@ -42,11 +44,12 @@ import { UsersModule } from '../users/users.module';
   providers: [
     ListingService,
     SearchService,
+    ExchangePreferenceService,
     LocationSearchStrategy,
     TextSearchStrategy,
     HybridSearchStrategy,
     SubscriptionGuard,
   ],
-  exports: [TypeOrmModule, ListingService],
+  exports: [TypeOrmModule, ListingService, ExchangePreferenceService],
 })
 export class ListingsModule {}

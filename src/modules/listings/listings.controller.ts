@@ -24,10 +24,13 @@ import {
 } from '@nestjs/swagger';
 import { ListingService } from './services/listing.service';
 import { SearchService } from './services/search.service';
+import { ExchangePreferenceService } from './services/exchange-preference.service';
 import { SubscriptionGuard } from './guards/subscription.guard';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { SearchListingDto } from './dto/search-listing.dto';
+import { AddPreferenceDto } from './dto/add-preference.dto';
+import { UpdatePriorityDto } from './dto/update-priority.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { User } from '../users/entities/user.entity';
@@ -38,6 +41,7 @@ export class ListingsController {
   constructor(
     private readonly listingService: ListingService,
     private readonly searchService: SearchService,
+    private readonly preferenceService: ExchangePreferenceService,
   ) {}
 
   /**
@@ -70,6 +74,31 @@ export class ListingsController {
   }
 
   /**
+   * Get current user's listings
+   * NOTE: This route MUST be defined before :id route to avoid "user" being matched as an ID
+   */
+  @Get('user/me')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get current user listings' })
+  @ApiResponse({ status: 200, description: 'User listings retrieved' })
+  async getMyListings(@CurrentUser() user: User) {
+    return this.listingService.findByUser(user.id);
+  }
+
+  /**
+   * Get listings by user ID (public - only returns available listings)
+   */
+  @Get('user/:userId')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get listings by user ID' })
+  @ApiResponse({ status: 200, description: 'User listings retrieved' })
+  async getUserListings(@Param('userId') userId: string) {
+    return this.listingService.findByUser(userId, 'available');
+  }
+
+  /**
    * Get listing by ID (public, increments view count)
    */
   @Get(':id')
@@ -80,18 +109,6 @@ export class ListingsController {
   @ApiResponse({ status: 404, description: 'Listing not found' })
   async findById(@Param('id') id: string) {
     return this.listingService.findById(id, true);
-  }
-
-  /**
-   * Get current user's listings
-   */
-  @Get('user/me')
-  @ApiBearerAuth()
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get current user listings' })
-  @ApiResponse({ status: 200, description: 'User listings retrieved' })
-  async getMyListings(@CurrentUser() user: User) {
-    return this.listingService.findByUser(user.id);
   }
 
   /**
@@ -177,5 +194,105 @@ export class ListingsController {
   async delete(@Param('id') id: string, @CurrentUser() user: User) {
     await this.listingService.delete(id, user.id);
     return { message: 'Listing deleted successfully' };
+  }
+
+  // ===== Exchange Preferences =====
+
+  /**
+   * Add preference to listing
+   */
+  @Post(':id/preferences')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add exchange preference to listing' })
+  @ApiResponse({ status: 201, description: 'Preference added successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request (max preferences reached, duplicate, etc.)',
+  })
+  @ApiResponse({ status: 403, description: 'Not authorized to modify this listing' })
+  @ApiResponse({ status: 404, description: 'Listing or book not found' })
+  async addPreference(
+    @Param('id') listingId: string,
+    @CurrentUser() user: User,
+    @Body() addPreferenceDto: AddPreferenceDto,
+  ) {
+    return this.preferenceService.addPreference(
+      listingId,
+      user.id,
+      addPreferenceDto.book_id,
+      addPreferenceDto.priority || 1,
+      user.subscription_tier,
+    );
+  }
+
+  /**
+   * Get all preferences for a listing
+   */
+  @Get(':id/preferences')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get all preferences for a listing' })
+  @ApiResponse({ status: 200, description: 'Preferences retrieved successfully' })
+  async getListingPreferences(@Param('id') listingId: string) {
+    return this.preferenceService.getListingPreferences(listingId);
+  }
+
+  /**
+   * Clear all preferences for a listing
+   */
+  @Delete(':id/preferences')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear all preferences for a listing' })
+  @ApiResponse({ status: 200, description: 'All preferences cleared successfully' })
+  @ApiResponse({ status: 403, description: 'Not authorized' })
+  @ApiResponse({ status: 404, description: 'Listing not found' })
+  async clearPreferences(
+    @Param('id') listingId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.preferenceService.clearPreferences(listingId, user.id);
+    return { message: 'All preferences cleared successfully' };
+  }
+
+  /**
+   * Remove preference
+   */
+  @Delete('preferences/:id')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove exchange preference' })
+  @ApiResponse({ status: 200, description: 'Preference removed successfully' })
+  @ApiResponse({ status: 403, description: 'Not authorized' })
+  @ApiResponse({ status: 404, description: 'Preference not found' })
+  async removePreference(
+    @Param('id') preferenceId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.preferenceService.removePreference(preferenceId, user.id);
+    return { message: 'Preference removed successfully' };
+  }
+
+  /**
+   * Update preference priority
+   */
+  @Patch('preferences/:id/priority')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update preference priority' })
+  @ApiResponse({ status: 200, description: 'Priority updated successfully' })
+  @ApiResponse({ status: 403, description: 'Not authorized' })
+  @ApiResponse({ status: 404, description: 'Preference not found' })
+  async updatePriority(
+    @Param('id') preferenceId: string,
+    @CurrentUser() user: User,
+    @Body() updatePriorityDto: UpdatePriorityDto,
+  ) {
+    return this.preferenceService.updatePriority(
+      preferenceId,
+      user.id,
+      updatePriorityDto.priority,
+    );
   }
 }

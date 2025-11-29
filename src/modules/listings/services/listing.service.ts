@@ -70,6 +70,7 @@ export class ListingService {
       region: string;
       search_radius_km?: number;
       preferred_genres?: string[];
+      status?: 'draft' | 'available';
     },
   ): Promise<Listing> {
     // Verify book exists
@@ -85,7 +86,7 @@ export class ListingService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + this.DEFAULT_EXPIRY_DAYS);
 
-    // Create listing (defaults to 'draft' status)
+    // Create listing (defaults to 'draft' status unless specified)
     const listing = this.listingRepository.create({
       user_id: userId,
       book_id: listingData.book_id,
@@ -98,7 +99,7 @@ export class ListingService {
       region: listingData.region,
       search_radius_km: listingData.search_radius_km || 10,
       preferred_genres: listingData.preferred_genres || [],
-      status: 'draft',
+      status: listingData.status || 'draft',
       expires_at: expiresAt,
       views_count: 0,
       interest_count: 0,

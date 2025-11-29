@@ -98,8 +98,10 @@ export class SearchService {
     const [listings, total] = await queryBuilder.getManyAndCount();
 
     return {
-      listings,
+      data: listings,
       total,
+      limit,
+      offset,
     };
   }
 
