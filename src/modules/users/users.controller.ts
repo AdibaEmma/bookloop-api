@@ -26,6 +26,7 @@ import {
 import { UserService } from './services/user.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { SubmitGhanaCardDto } from './dto/submit-ghana-card.dto';
 import {
   UserResponseDto,
   PublicProfileDto,
@@ -95,6 +96,32 @@ export class UsersController {
     const updatedUser = await this.userService.updateProfile(
       user.id,
       updateProfileDto,
+    );
+    return updatedUser as UserResponseDto;
+  }
+
+  /**
+   * Submit Ghana Card for verification (manual entry, pending admin approval)
+   *
+   * POST /users/me/ghana-card
+   */
+  @Post('me/ghana-card')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit Ghana Card number for verification' })
+  @ApiResponse({
+    status: 200,
+    description: 'Ghana Card submitted; pending admin approval',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid Ghana Card number' })
+  @ApiResponse({ status: 409, description: 'Ghana Card already verified' })
+  async submitGhanaCard(
+    @CurrentUser() user: User,
+    @Body() submitGhanaCardDto: SubmitGhanaCardDto,
+  ): Promise<UserResponseDto> {
+    const updatedUser = await this.userService.submitGhanaCard(
+      user.id,
+      submitGhanaCardDto,
     );
     return updatedUser as UserResponseDto;
   }

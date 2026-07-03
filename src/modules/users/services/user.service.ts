@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -143,6 +144,40 @@ export class UserService {
    * @param updateData - Partial user data to update
    * @returns Updated user
    */
+  /**
+   * Submit a Ghana Card number for verification. Stored as pending —
+   * ghana_card_verified stays false until an admin approves it.
+   */
+  async submitGhanaCard(
+    userId: string,
+    data: { ghana_card_number: string },
+  ): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (user.ghana_card_verified) {
+      throw new ConflictException('Ghana Card is already verified');
+    }
+
+    const cardNumber = data.ghana_card_number.toUpperCase();
+
+    // Ensure the card number isn't already claimed by another account.
+    const existing = await this.userRepository.findOne({
+      where: { ghana_card_number: cardNumber },
+    });
+    if (existing && existing.id !== userId) {
+      throw new ConflictException(
+        'This Ghana Card is already linked to another account',
+      );
+    }
+
+    await this.userRepository.update(userId, {
+      ghana_card_number: cardNumber,
+      ghana_card_verified: false,
+    });
+
+    return this.findById(userId);
+  }
+
   async updateProfile(
     userId: string,
     updateData: Partial<{
