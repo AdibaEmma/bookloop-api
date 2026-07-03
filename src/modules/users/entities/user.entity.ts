@@ -95,6 +95,9 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   ghana_card_verified_at: Date;
 
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  ghana_card_image: string;
+
   // Subscription
   @Column({
     type: 'enum',

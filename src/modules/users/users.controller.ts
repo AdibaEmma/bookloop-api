@@ -131,6 +131,44 @@ export class UsersController {
   }
 
   /**
+   * Upload a photo of the Ghana Card (for admin verification)
+   *
+   * POST /users/me/ghana-card/image
+   */
+  @Post('me/ghana-card/image')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a photo of the Ghana Card' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'Card image (JPG, PNG, WebP)' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Ghana Card image uploaded', type: UserResponseDto })
+  async uploadGhanaCardImage(
+    @CurrentUser() user: User,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
+        ],
+      }),
+    )
+    file: any,
+  ): Promise<UserResponseDto> {
+    const updatedUser = await this.userService.uploadGhanaCardImage(
+      user.id,
+      file.buffer,
+    );
+    return updatedUser as UserResponseDto;
+  }
+
+  /**
    * [Admin] List Ghana Card submissions pending verification
    *
    * GET /users/kyc/pending

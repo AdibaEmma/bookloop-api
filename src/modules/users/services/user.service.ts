@@ -186,6 +186,30 @@ export class UserService {
   }
 
   /**
+   * Upload a photo of the user's Ghana Card (for admin visual verification).
+   */
+  async uploadGhanaCardImage(userId: string, imageBuffer: Buffer): Promise<User> {
+    const user = await this.findById(userId);
+
+    // Replace any previous image
+    if (user.ghana_card_image) {
+      const publicId = this.extractPublicIdFromUrl(user.ghana_card_image);
+      if (publicId) await this.imageUploadService.deleteImage(publicId);
+    }
+
+    const uploadResult = await (this.imageUploadService as any).uploadImage(
+      imageBuffer,
+      { folder: 'bookloop/ghana-cards' },
+    );
+
+    await this.userRepository.update(userId, {
+      ghana_card_image: uploadResult.secure_url || uploadResult.url,
+    });
+
+    return this.findById(userId);
+  }
+
+  /**
    * [Admin] Ghana Card submissions awaiting verification: a card number is on
    * file but not yet verified.
    */
@@ -200,6 +224,7 @@ export class UserService {
       full_name: u.full_name,
       phone_number: u.phone_number,
       ghana_card_number: u.ghana_card_number,
+      ghana_card_image: u.ghana_card_image,
       submitted_at: u.updated_at,
       profile_picture: u.profile_picture,
     }));
