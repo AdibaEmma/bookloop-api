@@ -14,6 +14,10 @@ import type { Queue } from 'bull';
 import { LoggerService } from '../../common/logger/logger.service';
 import { OtpVerification } from './entities/otp-verification.entity';
 import { OtpEmailJob } from '../../common/queues/otp-email.processor';
+import { OTP_SMS_PROVIDER } from './otp.constants';
+import type { IOTPProvider } from './interfaces/otp-provider.interface';
+
+export type OtpChannel = 'email' | 'sms';
 
 @Injectable()
 export class OtpService {
@@ -28,6 +32,8 @@ export class OtpService {
     private cacheManager: Cache,
     @InjectQueue('otpEmail')
     private otpEmailQueue: Queue<OtpEmailJob>,
+    @Inject(OTP_SMS_PROVIDER)
+    private smsProvider: IOTPProvider,
     private configService: ConfigService,
     private logger: LoggerService,
   ) {
@@ -44,18 +50,24 @@ export class OtpService {
   }
 
   /**
-   * Generate and send OTP via email
+   * Generate and send an OTP.
+   *
+   * `identifier` is the lookup key + destination: an email when channel is
+   * 'email' (queued to the mail worker) or a phone number when channel is
+   * 'sms' (sent immediately via the configured SMS provider). Defaults to
+   * 'email' so existing callers are unchanged.
    */
   async sendOTP(
-    email: string,
+    identifier: string,
     purpose:
       | 'registration'
       | 'login'
       | 'password_reset'
       | 'email_verification',
+    channel: OtpChannel = 'email',
   ): Promise<{ reference: string; expiresAt: Date }> {
     // Check rate limiting
-    await this.checkRateLimit(email);
+    await this.checkRateLimit(identifier);
 
     // Generate alphanumeric code (6-8 characters)
     const code = this.generateOTPCode();
@@ -68,12 +80,13 @@ export class OtpService {
     const reference = `otp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
-      // Save OTP to database
+      // Save OTP to database. The `email` column doubles as a generic
+      // identifier column (holds a phone number for SMS OTPs).
       const otp = this.otpRepository.create({
-        email,
+        email: identifier,
         code,
         reference,
-        provider: 'email',
+        provider: channel === 'sms' ? this.smsProvider.getProviderName() : 'email',
         expires_at: expiresAt,
         purpose,
         attempts: 0,
@@ -82,17 +95,25 @@ export class OtpService {
 
       await this.otpRepository.save(otp);
 
-      // Queue email for sending
-      await this.otpEmailQueue.add('send', {
-        email,
-        code,
-        purpose,
-      });
+      if (channel === 'sms') {
+        // Deliver immediately via the configured SMS provider.
+        await this.smsProvider.sendOTP(identifier, code);
+        this.logger.log(
+          `OTP sent to ${identifier} via ${this.smsProvider.getProviderName()}`,
+          'OtpService',
+        );
+      } else {
+        // Queue email for sending.
+        await this.otpEmailQueue.add('send', {
+          email: identifier,
+          code,
+          purpose,
+        });
+        this.logger.log(`OTP queued for ${identifier} via email`, 'OtpService');
+      }
 
       // Set rate limit
-      await this.setRateLimit(email);
-
-      this.logger.log(`OTP queued for ${email} via email`, 'OtpService');
+      await this.setRateLimit(identifier);
 
       return {
         reference,
@@ -100,7 +121,7 @@ export class OtpService {
       };
     } catch (error: any) {
       this.logger.error(
-        `Failed to send OTP to ${email}: ${error.message}`,
+        `Failed to send OTP to ${identifier}: ${error.message}`,
         error.stack,
         'OtpService',
       );
