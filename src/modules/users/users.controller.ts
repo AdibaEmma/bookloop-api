@@ -32,6 +32,10 @@ import {
   PublicProfileDto,
 } from './dto/user-response.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { User } from './entities/user.entity';
 
 /**
@@ -124,6 +128,51 @@ export class UsersController {
       submitGhanaCardDto,
     );
     return updatedUser as UserResponseDto;
+  }
+
+  /**
+   * [Admin] List Ghana Card submissions pending verification
+   *
+   * GET /users/kyc/pending
+   */
+  @Get('kyc/pending')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[Admin] List pending Ghana Card submissions' })
+  @ApiResponse({ status: 200, description: 'Pending submissions' })
+  async listPendingGhanaCards() {
+    return this.userService.listPendingGhanaCards();
+  }
+
+  /**
+   * [Admin] Approve a user's Ghana Card
+   *
+   * POST /users/:id/kyc/approve
+   */
+  @Post(':id/kyc/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[Admin] Approve a Ghana Card submission' })
+  @ApiResponse({ status: 200, description: 'Ghana Card approved', type: UserResponseDto })
+  async approveGhanaCard(@Param('id') id: string): Promise<UserResponseDto> {
+    return (await this.userService.approveGhanaCard(id)) as UserResponseDto;
+  }
+
+  /**
+   * [Admin] Reject a user's Ghana Card (clears the number so they can resubmit)
+   *
+   * POST /users/:id/kyc/reject
+   */
+  @Post(':id/kyc/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[Admin] Reject a Ghana Card submission' })
+  @ApiResponse({ status: 200, description: 'Ghana Card rejected', type: UserResponseDto })
+  async rejectGhanaCard(@Param('id') id: string): Promise<UserResponseDto> {
+    return (await this.userService.rejectGhanaCard(id)) as UserResponseDto;
   }
 
   /**

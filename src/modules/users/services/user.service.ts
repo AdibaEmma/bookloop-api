@@ -6,7 +6,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { LocationService } from './location.service';
 import type { IImageUploadService } from '../interfaces/image-upload.interface';
@@ -173,6 +173,60 @@ export class UserService {
     await this.userRepository.update(userId, {
       ghana_card_number: cardNumber,
       ghana_card_verified: false,
+    });
+
+    return this.findById(userId);
+  }
+
+  /**
+   * [Admin] Ghana Card submissions awaiting verification: a card number is on
+   * file but not yet verified.
+   */
+  async listPendingGhanaCards() {
+    const users = await this.userRepository.find({
+      where: { ghana_card_verified: false, ghana_card_number: Not(IsNull()) },
+      order: { updated_at: 'ASC' },
+    });
+
+    return users.map((u) => ({
+      id: u.id,
+      full_name: u.full_name,
+      phone_number: u.phone_number,
+      ghana_card_number: u.ghana_card_number,
+      submitted_at: u.updated_at,
+      profile_picture: u.profile_picture,
+    }));
+  }
+
+  /**
+   * [Admin] Approve a Ghana Card submission.
+   */
+  async approveGhanaCard(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+
+    if (!user.ghana_card_number) {
+      throw new BadRequestException('No Ghana Card on file to approve');
+    }
+
+    await this.userRepository.update(userId, {
+      ghana_card_verified: true,
+      ghana_card_verified_at: new Date(),
+    });
+
+    return this.findById(userId);
+  }
+
+  /**
+   * [Admin] Reject a Ghana Card submission — clears the number so the user can
+   * resubmit.
+   */
+  async rejectGhanaCard(userId: string): Promise<User> {
+    await this.findById(userId);
+
+    await this.userRepository.update(userId, {
+      ghana_card_number: null as unknown as string,
+      ghana_card_verified: false,
+      ghana_card_verified_at: null as unknown as Date,
     });
 
     return this.findById(userId);
