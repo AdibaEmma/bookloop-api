@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthResponseDto, OtpSentResponseDto } from './dto/auth-response.dto';
 import { Public } from './decorators/public.decorator';
@@ -42,6 +43,16 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid OTP' })
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto): Promise<AuthResponseDto> {
     return this.authService.verifyOtp(verifyOtpDto);
+  }
+
+  @Public()
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend the SMS OTP to a phone number' })
+  @ApiResponse({ status: 200, description: 'OTP resent', type: OtpSentResponseDto })
+  @ApiResponse({ status: 401, description: 'No account for that phone number' })
+  async resendOtp(@Body() resendOtpDto: ResendOtpDto): Promise<OtpSentResponseDto> {
+    return this.authService.resendOtp(resendOtpDto);
   }
 
   @Public()

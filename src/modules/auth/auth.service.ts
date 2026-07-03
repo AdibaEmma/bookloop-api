@@ -15,6 +15,7 @@ import { UserRole } from '../roles/entities/user-role.entity';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { OtpService } from '../otp/otp.service';
 
@@ -33,22 +34,24 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    // Check if email already exists
-    const existingEmail = await this.userRepository.findOne({
-      where: { email: registerDto.email },
-    });
-
-    if (existingEmail) {
-      throw new ConflictException('Email already registered');
-    }
-
-    // Check if phone number already exists
+    // Check if phone number already exists (phone is the primary identifier)
     const existingPhone = await this.userRepository.findOne({
       where: { phone_number: registerDto.phone },
     });
 
     if (existingPhone) {
       throw new ConflictException('Phone number already registered');
+    }
+
+    // Email is optional — only enforce uniqueness when one is supplied
+    if (registerDto.email) {
+      const existingEmail = await this.userRepository.findOne({
+        where: { email: registerDto.email },
+      });
+
+      if (existingEmail) {
+        throw new ConflictException('Email already registered');
+      }
     }
 
     // Hash password if provided
@@ -84,25 +87,26 @@ export class AuthService {
       await this.userRoleRepository.save(userRole);
     }
 
-    // Send OTP via email
+    // Send OTP via SMS to the user's phone
     const { reference, expiresAt } = await this.otpService.sendOTP(
-      registerDto.email,
+      registerDto.phone,
       'registration',
+      'sms',
     );
 
     return {
-      message: 'OTP sent to your email for verification',
+      message: 'OTP sent to your phone for verification',
       reference,
       expires_at: expiresAt.toISOString(),
     };
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
-    // Verify OTP code
-    await this.otpService.verifyOTP(verifyOtpDto.email, verifyOtpDto.code);
+    // Verify OTP code (sent by SMS, keyed on phone number)
+    await this.otpService.verifyOTP(verifyOtpDto.phone, verifyOtpDto.code);
 
     const user = await this.userRepository.findOne({
-      where: { email: verifyOtpDto.email },
+      where: { phone_number: verifyOtpDto.phone },
       relations: ['roles', 'roles.role'],
     });
 
@@ -110,8 +114,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Mark email as verified
-    user.email_verified = true;
+    // Mark phone as verified
+    user.phone_verified = true;
     await this.userRepository.save(user);
 
     // Generate tokens
@@ -131,18 +135,42 @@ export class AuthService {
     };
   }
 
+  async resendOtp(resendOtpDto: ResendOtpDto) {
+    const user = await this.userRepository.findOne({
+      where: { phone_number: resendOtpDto.phone },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('No account found for this phone number');
+    }
+
+    // Registration OTP if the phone isn't verified yet, otherwise a login OTP.
+    const purpose = user.phone_verified ? 'login' : 'registration';
+    const { reference, expiresAt } = await this.otpService.sendOTP(
+      resendOtpDto.phone,
+      purpose,
+      'sms',
+    );
+
+    return {
+      message: 'OTP resent to your phone',
+      reference,
+      expires_at: expiresAt.toISOString(),
+    };
+  }
+
   async login(loginDto: LoginDto) {
     const user = await this.userRepository.findOne({
-      where: { email: loginDto.email },
-      select: ['id', 'email', 'password', 'email_verified', 'is_active', 'is_banned'],
+      where: { phone_number: loginDto.phone },
+      select: ['id', 'phone_number', 'password', 'phone_verified', 'is_active', 'is_banned'],
     });
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!user.email_verified) {
-      throw new UnauthorizedException('Email not verified');
+    if (!user.phone_verified) {
+      throw new UnauthorizedException('Phone number not verified');
     }
 
     if (!user.is_active) {
@@ -197,14 +225,15 @@ export class AuthService {
       };
     }
 
-    // If no password provided, send OTP for login
+    // If no password provided, send OTP by SMS for login
     const { reference, expiresAt } = await this.otpService.sendOTP(
-      loginDto.email,
+      loginDto.phone,
       'login',
+      'sms',
     );
 
     return {
-      message: 'OTP sent to your email',
+      message: 'OTP sent to your phone',
       reference,
       expires_at: expiresAt.toISOString(),
     };

@@ -3,11 +3,13 @@ import { IsString, IsEmail, IsOptional, IsPhoneNumber, MinLength, MaxLength } fr
 
 export class RegisterDto {
   @ApiProperty({
-    description: 'Email address',
+    description: 'Email address (optional — phone is the primary identifier)',
     example: 'kwame.mensah@example.com',
+    required: false,
   })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiProperty({
     description: 'Password (optional) - if not provided, user will login via OTP only',

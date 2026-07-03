@@ -1,16 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString, IsPhoneNumber, MinLength } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
-    description: 'Email address',
-    example: 'kwame.mensah@example.com',
+    description: 'Phone number in international format',
+    example: '+233501234567',
   })
-  @IsEmail()
-  email: string;
+  @IsPhoneNumber('GH')
+  phone: string;
 
   @ApiProperty({
-    description: 'Password (optional) - if provided, login with password; if not, OTP will be sent',
+    description:
+      'Password (optional) - if provided, login with password; if not, an OTP is sent by SMS',
     example: 'SecureP@ssw0rd',
     required: false,
   })
