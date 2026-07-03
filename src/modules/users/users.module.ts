@@ -5,6 +5,7 @@ import { UsersController } from './users.controller';
 import { UserService } from './services/user.service';
 import { LocationService } from './services/location.service';
 import { CloudinaryService } from './services/cloudinary.service';
+import { SourceIdService } from './services/source-id.service';
 
 /**
  * UsersModule
@@ -27,6 +28,7 @@ import { CloudinaryService } from './services/cloudinary.service';
     UserService,
     LocationService,
     CloudinaryService,
+    SourceIdService,
     // Provider binding for IImageUploadService interface
     {
       provide: 'IImageUploadService',

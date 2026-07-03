@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, IsNull } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { LocationService } from './location.service';
+import { SourceIdService } from './source-id.service';
 import type { IImageUploadService } from '../interfaces/image-upload.interface';
 
 /**
@@ -34,6 +35,7 @@ export class UserService {
     private readonly locationService: LocationService,
     @Inject('IImageUploadService')
     private readonly imageUploadService: IImageUploadService,
+    private readonly sourceIdService: SourceIdService,
   ) {}
 
   /**
@@ -170,9 +172,14 @@ export class UserService {
       );
     }
 
+    // Attempt automatic verification via SourceID. If it's not configured or
+    // can't verify, the submission stays pending for manual admin approval.
+    const autoVerified = await this.sourceIdService.verifyGhanaCard(cardNumber);
+
     await this.userRepository.update(userId, {
       ghana_card_number: cardNumber,
-      ghana_card_verified: false,
+      ghana_card_verified: autoVerified,
+      ghana_card_verified_at: autoVerified ? new Date() : (null as unknown as Date),
     });
 
     return this.findById(userId);
