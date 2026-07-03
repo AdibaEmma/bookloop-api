@@ -40,7 +40,24 @@ export class AuthService {
     });
 
     if (existingPhone) {
-      throw new ConflictException('Phone number already registered');
+      // If the account exists but was never verified (e.g. a prior attempt
+      // created the user but the SMS failed), let them retry: resend the OTP
+      // instead of blocking. Only a fully-verified phone is a hard conflict.
+      if (existingPhone.phone_verified) {
+        throw new ConflictException('Phone number already registered');
+      }
+
+      const { reference, expiresAt } = await this.otpService.sendOTP(
+        registerDto.phone,
+        'registration',
+        'sms',
+      );
+
+      return {
+        message: 'OTP sent to your phone for verification',
+        reference,
+        expires_at: expiresAt.toISOString(),
+      };
     }
 
     // Email is optional — only enforce uniqueness when one is supplied
