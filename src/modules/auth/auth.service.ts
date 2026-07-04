@@ -177,17 +177,34 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
+    if (!loginDto.phone && !loginDto.email) {
+      throw new BadRequestException('Provide a phone number or email to log in');
+    }
+
     const user = await this.userRepository.findOne({
-      where: { phone_number: loginDto.phone },
-      select: ['id', 'phone_number', 'password', 'phone_verified', 'is_active', 'is_banned'],
+      where: loginDto.phone
+        ? { phone_number: loginDto.phone }
+        : { email: loginDto.email },
+      select: [
+        'id',
+        'phone_number',
+        'email',
+        'password',
+        'phone_verified',
+        'email_verified',
+        'is_active',
+        'is_banned',
+      ],
     });
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!user.phone_verified) {
-      throw new UnauthorizedException('Phone number not verified');
+    // Accept accounts verified by either channel — pre-migration accounts were
+    // verified by email (phone_verified defaults to false for them).
+    if (!user.phone_verified && !user.email_verified) {
+      throw new UnauthorizedException('Account not verified');
     }
 
     if (!user.is_active) {
@@ -242,15 +259,27 @@ export class AuthService {
       };
     }
 
-    // If no password provided, send OTP by SMS for login
-    const { reference, expiresAt } = await this.otpService.sendOTP(
-      loginDto.phone,
-      'login',
-      'sms',
-    );
+    // If no password provided, send a login OTP over the channel used to log in.
+    if (loginDto.phone) {
+      const { reference, expiresAt } = await this.otpService.sendOTP(
+        loginDto.phone,
+        'login',
+        'sms',
+      );
+      return {
+        message: 'OTP sent to your phone',
+        reference,
+        expires_at: expiresAt.toISOString(),
+      };
+    }
 
+    const { reference, expiresAt } = await this.otpService.sendOTP(
+      loginDto.email as string,
+      'login',
+      'email',
+    );
     return {
-      message: 'OTP sent to your phone',
+      message: 'OTP sent to your email',
       reference,
       expires_at: expiresAt.toISOString(),
     };
