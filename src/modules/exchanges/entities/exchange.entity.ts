@@ -62,6 +62,12 @@ export class Exchange {
   owner_response: string;
 
   // Meetup details
+  @Column({ type: 'uuid', nullable: true })
+  meetup_spot_id: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  meetup_spot_name: string;
+
   @Column({
     type: 'geography',
     spatialFeatureType: 'Point',

@@ -51,7 +51,7 @@ export class ExchangeService {
    * Create exchange request
    *
    * @param requesterId - User requesting the exchange
-   * @param requestData - Exchange request data
+   * @param requestData - Exchange request data with optional proposed meetup
    * @returns Created exchange
    */
   async createExchange(
@@ -60,6 +60,14 @@ export class ExchangeService {
       listing_id: string;
       offered_listing_id?: string;
       message?: string;
+      proposed_meetup?: {
+        meetup_spot_id?: string;
+        latitude: number;
+        longitude: number;
+        address: string;
+        location_name?: string;
+      };
+      proposed_meetup_time?: string;
     },
   ): Promise<Exchange> {
     // Verify listing exists and is available
@@ -89,7 +97,19 @@ export class ExchangeService {
       }
     }
 
-    // Create exchange
+    // Build meetup location if provided
+    let meetupLocation: Point | undefined;
+    if (requestData.proposed_meetup) {
+      meetupLocation = {
+        type: 'Point',
+        coordinates: [
+          requestData.proposed_meetup.longitude,
+          requestData.proposed_meetup.latitude,
+        ],
+      };
+    }
+
+    // Create exchange with proposed meetup details
     const exchange = this.exchangeRepository.create({
       requester_id: requesterId,
       owner_id: listing.user_id,
@@ -97,6 +117,15 @@ export class ExchangeService {
       offered_listing_id: requestData.offered_listing_id,
       requester_message: requestData.message,
       status: 'pending',
+      // Proposed meetup details
+      meetup_spot_id: requestData.proposed_meetup?.meetup_spot_id,
+      meetup_spot_name: requestData.proposed_meetup?.location_name,
+      meetup_location: meetupLocation,
+      meetup_address: requestData.proposed_meetup?.address,
+      meetup_time: requestData.proposed_meetup_time
+        ? new Date(requestData.proposed_meetup_time)
+        : undefined,
+      // Confirmation flags
       requester_confirmed_meetup: false,
       owner_confirmed_meetup: false,
       requester_confirmed_completion: false,
@@ -108,40 +137,68 @@ export class ExchangeService {
 
     const savedExchange = await this.exchangeRepository.save(exchange);
 
+    // Build notification message with meetup details
+    let notificationMessage = `Someone is interested in exchanging "${listing.book?.title || 'your book'}"`;
+    if (requestData.proposed_meetup?.location_name) {
+      notificationMessage += ` and proposed meeting at ${requestData.proposed_meetup.location_name}`;
+    }
+
     // Send notification to listing owner
     await this.notificationsService.sendNotification(
       listing.user_id,
       NotificationType.EXCHANGE_REQUEST,
       'New Exchange Request',
-      `Someone is interested in exchanging "${listing.book?.title || 'your book'}"`,
+      notificationMessage,
       {
         type: 'EXCHANGE_REQUEST',
         exchange_id: savedExchange.id,
         listing_id: listing.id,
+        proposed_meetup: requestData.proposed_meetup?.location_name,
+        proposed_time: requestData.proposed_meetup_time,
       },
     );
 
-    return savedExchange;
+    // Return the exchange with properly formatted geography data
+    return this.findById(savedExchange.id);
   }
 
   /**
    * Find exchange by ID
    *
    * @param exchangeId - Exchange ID
-   * @returns Exchange entity
+   * @returns Exchange entity with properly formatted meetup_location
    * @throws NotFoundException if not found
    */
   async findById(exchangeId: string): Promise<Exchange> {
-    const exchange = await this.exchangeRepository.findOne({
-      where: { id: exchangeId },
-      relations: ['requester', 'owner', 'listing', 'offered_listing'],
-    });
+    // Use query builder to properly transform geography to GeoJSON
+    const exchange = await this.exchangeRepository
+      .createQueryBuilder('exchange')
+      .leftJoinAndSelect('exchange.requester', 'requester')
+      .leftJoinAndSelect('exchange.owner', 'owner')
+      .leftJoinAndSelect('exchange.listing', 'listing')
+      .leftJoinAndSelect('listing.book', 'book')
+      .leftJoinAndSelect('listing.user', 'listing_user')
+      .leftJoinAndSelect('exchange.offered_listing', 'offered_listing')
+      .leftJoinAndSelect('offered_listing.book', 'offered_book')
+      .addSelect(
+        'ST_AsGeoJSON(exchange.meetup_location)::json',
+        'exchange_meetup_location_geojson',
+      )
+      .where('exchange.id = :id', { id: exchangeId })
+      .getRawAndEntities();
 
-    if (!exchange) {
+    if (!exchange.entities[0]) {
       throw new NotFoundException('Exchange not found');
     }
 
-    return exchange;
+    const result = exchange.entities[0];
+
+    // Transform meetup_location from raw GeoJSON if available
+    if (exchange.raw[0]?.exchange_meetup_location_geojson) {
+      result.meetup_location = exchange.raw[0].exchange_meetup_location_geojson;
+    }
+
+    return result;
   }
 
   /**
@@ -150,7 +207,7 @@ export class ExchangeService {
    * @param userId - User ID
    * @param role - Filter by role (requester, owner, or both)
    * @param status - Filter by status
-   * @returns Array of exchanges
+   * @returns Array of exchanges with properly formatted meetup_location
    */
   async findByUser(
     userId: string,
@@ -162,7 +219,13 @@ export class ExchangeService {
       .leftJoinAndSelect('exchange.requester', 'requester')
       .leftJoinAndSelect('exchange.owner', 'owner')
       .leftJoinAndSelect('exchange.listing', 'listing')
+      .leftJoinAndSelect('listing.book', 'book')
       .leftJoinAndSelect('exchange.offered_listing', 'offered_listing')
+      .leftJoinAndSelect('offered_listing.book', 'offered_book')
+      .addSelect(
+        'ST_AsGeoJSON(exchange.meetup_location)::json',
+        'exchange_meetup_location_geojson',
+      )
       .where(
         role === 'requester'
           ? 'exchange.requester_id = :userId'
@@ -178,7 +241,15 @@ export class ExchangeService {
 
     query.orderBy('exchange.created_at', 'DESC');
 
-    return query.getMany();
+    const result = await query.getRawAndEntities();
+
+    // Transform meetup_location for each exchange
+    return result.entities.map((exchange, index) => {
+      if (result.raw[index]?.exchange_meetup_location_geojson) {
+        exchange.meetup_location = result.raw[index].exchange_meetup_location_geojson;
+      }
+      return exchange;
+    });
   }
 
   /**
@@ -280,7 +351,8 @@ export class ExchangeService {
       },
     );
 
-    return savedExchange;
+    // Return with properly formatted geography data
+    return this.findById(savedExchange.id);
   }
 
   /**
@@ -362,6 +434,8 @@ export class ExchangeService {
     exchangeId: string,
     userId: string,
     meetupData: {
+      meetup_spot_id?: string;
+      location_name?: string;
       latitude: number;
       longitude: number;
       address: string;
@@ -389,10 +463,23 @@ export class ExchangeService {
     };
 
     exchange.meetup_location = location;
+    if (meetupData.meetup_spot_id) {
+      exchange.meetup_spot_id = meetupData.meetup_spot_id;
+    }
+    if (meetupData.location_name) {
+      exchange.meetup_spot_name = meetupData.location_name;
+    }
     exchange.meetup_address = meetupData.address;
     exchange.meetup_time = meetupData.meetup_time;
 
-    return this.exchangeRepository.save(exchange);
+    // Reset confirmation flags when meetup details change
+    exchange.requester_confirmed_meetup = false;
+    exchange.owner_confirmed_meetup = false;
+
+    const saved = await this.exchangeRepository.save(exchange);
+
+    // Return with properly formatted geography data
+    return this.findById(saved.id);
   }
 
   /**
@@ -431,7 +518,10 @@ export class ExchangeService {
       exchange.owner_confirmed_meetup = true;
     }
 
-    return this.exchangeRepository.save(exchange);
+    const saved = await this.exchangeRepository.save(exchange);
+
+    // Return with properly formatted geography data
+    return this.findById(saved.id);
   }
 
   /**
@@ -504,7 +594,10 @@ export class ExchangeService {
       ]);
     }
 
-    return this.exchangeRepository.save(exchange);
+    const saved = await this.exchangeRepository.save(exchange);
+
+    // Return with properly formatted geography data
+    return this.findById(saved.id);
   }
 
   /**

@@ -5,6 +5,7 @@ import { Rating } from './entities/rating.entity';
 import { ExchangesController } from './exchanges.controller';
 import { ExchangeService } from './services/exchange.service';
 import { RatingService } from './services/rating.service';
+import { QRHandoverService } from './services/qr-handover.service';
 import { ExchangeStateMachine } from './state-machine/exchange-state-machine.service';
 import { ListingsModule } from '../listings/listings.module';
 import { UsersModule } from '../users/users.module';
@@ -18,6 +19,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
  * Services:
  * - ExchangeService: Exchange lifecycle management
  * - RatingService: Rating and review system (SRP)
+ * - QRHandoverService: QR code generation and verification for handovers
  * - ExchangeStateMachine: State pattern for status transitions
  *
  * State Pattern:
@@ -40,8 +42,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [
     ExchangeService,
     RatingService,
+    QRHandoverService,
     ExchangeStateMachine,
   ],
-  exports: [TypeOrmModule, ExchangeService, RatingService],
+  exports: [TypeOrmModule, ExchangeService, RatingService, QRHandoverService],
 })
 export class ExchangesModule {}

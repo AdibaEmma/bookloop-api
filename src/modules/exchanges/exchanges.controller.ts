@@ -16,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { ExchangeService } from './services/exchange.service';
 import { RatingService } from './services/rating.service';
+import { QRHandoverService } from './services/qr-handover.service';
 import { CreateExchangeDto } from './dto/create-exchange.dto';
 import { SetMeetupDto } from './dto/set-meetup.dto';
 import { CreateRatingDto } from './dto/create-rating.dto';
@@ -30,6 +31,7 @@ export class ExchangesController {
   constructor(
     private readonly exchangeService: ExchangeService,
     private readonly ratingService: RatingService,
+    private readonly qrHandoverService: QRHandoverService,
   ) {}
 
   /**
@@ -221,5 +223,84 @@ export class ExchangesController {
   async getActions(@Param('id') id: string, @CurrentUser() user: User) {
     const actions = await this.exchangeService.getAvailableActions(id, user.id);
     return { actions };
+  }
+
+  /**
+   * Get all user's exchanges (without role filter)
+   */
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get all user exchanges' })
+  @ApiResponse({ status: 200, description: 'All exchanges retrieved' })
+  async getAllExchanges(
+    @CurrentUser() user: User,
+    @Query('status') status?: string,
+  ) {
+    return this.exchangeService.findByUser(user.id, undefined, status);
+  }
+
+  /**
+   * Get exchange statistics
+   */
+  @Get('stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get exchange statistics for current user' })
+  @ApiResponse({ status: 200, description: 'Exchange stats retrieved' })
+  async getStats(@CurrentUser() user: User) {
+    const [all, completed, pendingAsRequester, pendingAsOwner, ratingStats] = await Promise.all([
+      this.exchangeService.findByUser(user.id),
+      this.exchangeService.findByUser(user.id, undefined, 'completed'),
+      this.exchangeService.findByUser(user.id, 'requester', 'pending'),
+      this.exchangeService.findByUser(user.id, 'owner', 'pending'),
+      this.ratingService.getRatingStats(user.id),
+    ]);
+
+    return {
+      totalExchanges: all.length,
+      completedExchanges: completed.length,
+      pendingRequests: pendingAsRequester.length,
+      incomingRequests: pendingAsOwner.length,
+      averageRating: Number((ratingStats.average_rating || 5.0).toFixed(1)),
+    };
+  }
+
+  /**
+   * Get user's rating for an exchange
+   */
+  @Get(':id/rating')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get user rating for exchange' })
+  @ApiResponse({ status: 200, description: 'Rating retrieved' })
+  @ApiResponse({ status: 404, description: 'Rating not found' })
+  async getUserRating(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.ratingService.getRatingByUserForExchange(id, user.id);
+  }
+
+  /**
+   * Generate QR code for handover
+   */
+  @Post(':id/generate-qr')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Generate QR code for handover' })
+  @ApiResponse({ status: 200, description: 'QR code generated' })
+  @ApiResponse({ status: 400, description: 'Cannot generate QR for this exchange' })
+  async generateQR(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.qrHandoverService.generateQRCode(id, user.id);
+  }
+
+  /**
+   * Confirm handover via QR code
+   */
+  @Post(':id/confirm-handover')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm handover by scanning QR code' })
+  @ApiResponse({ status: 200, description: 'Handover confirmed' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired QR code' })
+  async confirmHandover(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Body() body: { qrCode: string },
+  ) {
+    return this.qrHandoverService.confirmHandover(id, user.id, body.qrCode);
   }
 }
