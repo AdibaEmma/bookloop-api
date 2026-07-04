@@ -119,11 +119,17 @@ export class AuthService {
   }
 
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
-    // Verify OTP code (sent by SMS, keyed on phone number)
-    await this.otpService.verifyOTP(verifyOtpDto.phone, verifyOtpDto.code);
+    const { phone, email, code } = verifyOtpDto;
+    if (!phone && !email) {
+      throw new BadRequestException('Provide the phone or email the code was sent to');
+    }
+
+    // The OTP is keyed on the identifier it was sent to (phone for SMS, email otherwise).
+    const identifier = (phone ?? email) as string;
+    await this.otpService.verifyOTP(identifier, code);
 
     const user = await this.userRepository.findOne({
-      where: { phone_number: verifyOtpDto.phone },
+      where: phone ? { phone_number: phone } : { email },
       relations: ['roles', 'roles.role'],
     });
 
@@ -131,8 +137,12 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Mark phone as verified
-    user.phone_verified = true;
+    // Mark the verified channel
+    if (phone) {
+      user.phone_verified = true;
+    } else {
+      user.email_verified = true;
+    }
     await this.userRepository.save(user);
 
     // Generate tokens
@@ -153,24 +163,40 @@ export class AuthService {
   }
 
   async resendOtp(resendOtpDto: ResendOtpDto) {
+    const { phone, email } = resendOtpDto;
+    if (!phone && !email) {
+      throw new BadRequestException('Provide a phone or email to resend the code to');
+    }
+
     const user = await this.userRepository.findOne({
-      where: { phone_number: resendOtpDto.phone },
+      where: phone ? { phone_number: phone } : { email },
     });
 
     if (!user) {
-      throw new UnauthorizedException('No account found for this phone number');
+      throw new UnauthorizedException('No account found for this identifier');
     }
 
-    // Registration OTP if the phone isn't verified yet, otherwise a login OTP.
-    const purpose = user.phone_verified ? 'login' : 'registration';
-    const { reference, expiresAt } = await this.otpService.sendOTP(
-      resendOtpDto.phone,
-      purpose,
-      'sms',
-    );
+    if (phone) {
+      const verified = user.phone_verified;
+      const { reference, expiresAt } = await this.otpService.sendOTP(
+        phone,
+        verified ? 'login' : 'registration',
+        'sms',
+      );
+      return {
+        message: 'OTP resent to your phone',
+        reference,
+        expires_at: expiresAt.toISOString(),
+      };
+    }
 
+    const { reference, expiresAt } = await this.otpService.sendOTP(
+      email as string,
+      user.email_verified ? 'login' : 'registration',
+      'email',
+    );
     return {
-      message: 'OTP resent to your phone',
+      message: 'OTP resent to your email',
       reference,
       expires_at: expiresAt.toISOString(),
     };
