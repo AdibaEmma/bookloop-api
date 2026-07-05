@@ -48,36 +48,90 @@ export class GoogleBooksService implements IBookMetadataProvider {
    * @returns Book metadata or null if not found
    */
   async lookupByISBN(isbn: string): Promise<BookMetadata | null> {
+    const cleanIsbn = isbn.replace(/[-\s]/g, '');
+
+    // 1) Google Books — now authenticated when GOOGLE_BOOKS_API_KEY is set
+    //    (buildUrl appends the key). A keyless request gets a 0/day quota and 429s.
     try {
-      // Clean ISBN (remove hyphens and spaces)
-      const cleanIsbn = isbn.replace(/[-\s]/g, '');
-
-      // Search by ISBN using Google Books API (simple URL without API key)
-      const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`;
-
-      this.logger.debug(`Fetching from URL: ${url}`);
-
-      const { data } = await axios.get(url);
-
-      if (!data.items || data.items.length === 0) {
-        this.logger.debug(`No book found for ISBN: ${isbn}`);
-        return null;
+      const url = this.buildUrl('/volumes', { q: `isbn:${cleanIsbn}` });
+      const { data } = await axios.get(url, { timeout: 8000 });
+      if (data.items?.length) {
+        return this.parseBookVolume(data.items[0]);
       }
-
-      // Parse first result
-      return this.parseBookVolume(data.items[0]);
+      this.logger.debug(`Google Books: no result for ISBN ${cleanIsbn}`);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error(
-          `Google Books API error: ${error.response?.status} ${error.response?.statusText}`,
-        );
-        this.logger.error(
-          `Error data: ${JSON.stringify(error.response?.data)}`,
+      this.logQuotaAware(error, `ISBN ${cleanIsbn}`);
+    }
+
+    // 2) Open Library fallback — free, no key, no quota — so ISBN lookups keep
+    //    working when Google Books is exhausted or unconfigured.
+    const fallback = await this.lookupByISBNOpenLibrary(cleanIsbn);
+    if (fallback) return fallback;
+
+    this.logger.debug(`No book found for ISBN ${cleanIsbn} in any provider`);
+    return null;
+  }
+
+  /** Free fallback: openlibrary.org book data by ISBN (no key, no quota). */
+  private async lookupByISBNOpenLibrary(isbn: string): Promise<BookMetadata | null> {
+    try {
+      const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`;
+      const { data } = await axios.get(url, { timeout: 8000 });
+      const book = data?.[`ISBN:${isbn}`];
+      if (!book) return null;
+
+      const author =
+        Array.isArray(book.authors) && book.authors.length
+          ? book.authors.map((a: any) => a.name).filter(Boolean).join(', ')
+          : 'Unknown Author';
+
+      let publicationYear: number | undefined;
+      const yearMatch = String(book.publish_date ?? '').match(/\d{4}/);
+      if (yearMatch) publicationYear = parseInt(yearMatch[0], 10);
+
+      const cover: string | undefined =
+        book.cover?.large || book.cover?.medium || book.cover?.small;
+      const categories = Array.isArray(book.subjects)
+        ? book.subjects.slice(0, 5).map((s: any) => s.name).filter(Boolean)
+        : [];
+
+      this.logger.debug(`Open Library resolved ISBN ${isbn}`);
+      return {
+        isbn,
+        title: book.title || 'Untitled',
+        author,
+        description: typeof book.notes === 'string' ? book.notes : undefined,
+        cover_image: cover ? cover.replace('http://', 'https://') : undefined,
+        publisher: book.publishers?.[0]?.name,
+        publication_year: publicationYear,
+        language: 'en',
+        pages: book.number_of_pages,
+        genre: categories[0],
+        categories,
+        provider_id: book.key,
+        rating: undefined,
+        ratings_count: undefined,
+      };
+    } catch (error: any) {
+      this.logger.warn(`Open Library ISBN lookup failed for ${isbn}: ${error?.message}`);
+      return null;
+    }
+  }
+
+  /** Quota exhaustion (429) is expected and recoverable — log it as a warning,
+   *  not an error dump, and let callers fall back. */
+  private logQuotaAware(error: unknown, context: string): void {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      if (status === 429) {
+        this.logger.warn(
+          `Google Books quota exhausted (429) for ${context} — set GOOGLE_BOOKS_API_KEY / enable the Books API for higher limits; using fallback.`,
         );
       } else {
-        this.logger.error(`Failed to lookup ISBN ${isbn}: ${error.message}`);
+        this.logger.warn(`Google Books error ${status} for ${context}: ${error.message}`);
       }
-      return null;
+    } else {
+      this.logger.warn(`Google Books lookup failed for ${context}: ${(error as Error).message}`);
     }
   }
 
@@ -96,38 +150,66 @@ export class GoogleBooksService implements IBookMetadataProvider {
       startIndex?: number;
     },
   ): Promise<BookMetadata[]> {
-    try {
-      const maxResults = Math.min(options?.maxResults || 10, 40); // Cap at 40
-      const startIndex = options?.startIndex || 0;
+    const maxResults = Math.min(options?.maxResults || 10, 40); // Cap at 40
+    const startIndex = options?.startIndex || 0;
 
+    try {
       const params: Record<string, string> = {
         q: query,
         maxResults: maxResults.toString(),
         startIndex: startIndex.toString(),
       };
-
       if (options?.language) {
         params.langRestrict = options.language;
       }
 
       const url = this.buildUrl('/volumes', params);
+      const { data } = await axios.get(url, { timeout: 8000 });
 
-      const { data } = await axios.get(url);
-
-      if (!data.items || data.items.length === 0) {
-        return [];
+      if (data.items?.length) {
+        return data.items.map((item: any) => this.parseBookVolume(item));
       }
-
-      // Parse all results
-      return data.items.map((item: any) => this.parseBookVolume(item));
+      this.logger.debug(`Google Books: no results for "${query}"`);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        this.logger.error(
-          `Google Books API error: ${error.response?.status} ${error.response?.statusText}`,
-        );
-      } else {
-        this.logger.error(`Failed to search books: ${error.message}`);
-      }
+      this.logQuotaAware(error, `search "${query}"`);
+    }
+
+    // Open Library fallback so search survives Google Books quota exhaustion.
+    return this.searchBooksOpenLibrary(query, maxResults);
+  }
+
+  /** Free fallback: openlibrary.org search (no key, no quota). */
+  private async searchBooksOpenLibrary(query: string, maxResults: number): Promise<BookMetadata[]> {
+    try {
+      const fields = 'title,author_name,cover_i,first_publish_year,isbn,key,subject,language';
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${maxResults}&fields=${fields}`;
+      const { data } = await axios.get(url, { timeout: 8000 });
+      const docs: any[] = Array.isArray(data?.docs) ? data.docs : [];
+      if (docs.length) this.logger.debug(`Open Library search matched ${docs.length} for "${query}"`);
+
+      return docs.map((d) => {
+        const categories = Array.isArray(d.subject) ? d.subject.slice(0, 5) : [];
+        return {
+          isbn: Array.isArray(d.isbn) ? d.isbn[0] : undefined,
+          title: d.title || 'Untitled',
+          author: Array.isArray(d.author_name) ? d.author_name.join(', ') : 'Unknown Author',
+          description: undefined,
+          cover_image: d.cover_i
+            ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg`
+            : undefined,
+          publisher: undefined,
+          publication_year: d.first_publish_year,
+          language: Array.isArray(d.language) ? d.language[0] : 'en',
+          pages: undefined,
+          genre: categories[0],
+          categories,
+          provider_id: d.key,
+          rating: undefined,
+          ratings_count: undefined,
+        };
+      });
+    } catch (error: any) {
+      this.logger.warn(`Open Library search failed for "${query}": ${error?.message}`);
       return [];
     }
   }
