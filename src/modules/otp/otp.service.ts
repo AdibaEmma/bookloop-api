@@ -96,12 +96,26 @@ export class OtpService {
       await this.otpRepository.save(otp);
 
       if (channel === 'sms') {
-        // Deliver immediately via the configured SMS provider.
-        await this.smsProvider.sendOTP(identifier, code);
-        this.logger.log(
-          `OTP sent to ${identifier} via ${this.smsProvider.getProviderName()}`,
-          'OtpService',
-        );
+        // The OTP row is already persisted, so the code is valid the moment it
+        // is saved. Deliver the SMS out-of-band (fire-and-forget) so the
+        // provider's network latency never blocks — and never times out — the
+        // login/registration request. Delivery failures are logged; the user
+        // can resend if the SMS doesn't arrive.
+        void this.smsProvider
+          .sendOTP(identifier, code)
+          .then(() =>
+            this.logger.log(
+              `OTP sent to ${identifier} via ${this.smsProvider.getProviderName()}`,
+              'OtpService',
+            ),
+          )
+          .catch((err: any) =>
+            this.logger.error(
+              `SMS OTP delivery failed for ${identifier}: ${err?.message}`,
+              err?.stack,
+              'OtpService',
+            ),
+          );
       } else {
         // Queue email for sending.
         await this.otpEmailQueue.add('send', {

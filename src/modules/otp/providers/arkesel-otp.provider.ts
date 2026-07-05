@@ -31,6 +31,7 @@ export class ArkeselOTPProvider implements IOTPProvider {
 
     this.httpClient = axios.create({
       baseURL: 'https://sms.arkesel.com/api/v2',
+      timeout: 15000,
       headers: {
         'api-key': apiKey,
         'Content-Type': 'application/json',
