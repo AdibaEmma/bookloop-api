@@ -107,6 +107,7 @@ export class AuthController {
       middle_name: user.middle_name,
       last_name: user.last_name,
       profile_picture: user.profile_picture,
+      bio: user.bio,
       location: user.location,
       address: user.address,
       city: user.city,
