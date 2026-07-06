@@ -1,10 +1,13 @@
 import {
   Injectable,
+  Inject,
   BadRequestException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Exchange } from '../entities/exchange.entity';
@@ -31,21 +34,14 @@ interface QRCodeData {
   code: string;
   exchangeId: string;
   generatedBy: string;
-  expiresAt: Date;
+  expiresAt: string; // ISO string — survives cache (JSON) round-trips
 }
 
-// In-memory store for QR codes (in production, use Redis)
-const qrCodeStore = new Map<string, QRCodeData>();
-
-// Cleanup expired codes every 5 minutes
-setInterval(() => {
-  const now = new Date();
-  for (const [key, data] of qrCodeStore.entries()) {
-    if (data.expiresAt < now) {
-      qrCodeStore.delete(key);
-    }
-  }
-}, 5 * 60 * 1000);
+// QR codes live in the shared cache (Redis), not a process-local Map — so they
+// work across instances/restarts and expire via TTL instead of a setInterval.
+const QR_CACHE_PREFIX = 'qr:handover:';
+const QR_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const qrCacheKey = (code: string) => `${QR_CACHE_PREFIX}${code}`;
 
 @Injectable()
 export class QRHandoverService {
@@ -54,6 +50,7 @@ export class QRHandoverService {
     private readonly exchangeRepository: Repository<Exchange>,
     private readonly exchangeService: ExchangeService,
     private readonly listingService: ListingService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
@@ -88,16 +85,16 @@ export class QRHandoverService {
 
     // Generate cryptographically secure code
     const code = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + QR_TTL_MS);
 
-    // Store the code
+    // Store the code in the shared cache with a matching TTL.
     const qrData: QRCodeData = {
       code,
       exchangeId,
       generatedBy: userId,
-      expiresAt,
+      expiresAt: expiresAt.toISOString(),
     };
-    qrCodeStore.set(code, qrData);
+    await this.cache.set(qrCacheKey(code), qrData, QR_TTL_MS);
 
     return {
       code,
@@ -135,7 +132,7 @@ export class QRHandoverService {
     }
 
     // Validate QR code
-    const qrData = qrCodeStore.get(qrCode);
+    const qrData = await this.cache.get<QRCodeData>(qrCacheKey(qrCode));
 
     if (!qrData) {
       throw new BadRequestException('Invalid or expired QR code');
@@ -145,8 +142,8 @@ export class QRHandoverService {
       throw new BadRequestException('QR code does not match this exchange');
     }
 
-    if (qrData.expiresAt < new Date()) {
-      qrCodeStore.delete(qrCode);
+    if (new Date(qrData.expiresAt) < new Date()) {
+      await this.cache.del(qrCacheKey(qrCode));
       throw new BadRequestException('QR code has expired');
     }
 
@@ -156,7 +153,7 @@ export class QRHandoverService {
     }
 
     // Delete the code to prevent reuse
-    qrCodeStore.delete(qrCode);
+    await this.cache.del(qrCacheKey(qrCode));
 
     // Confirm completion for both parties
     exchange.requester_confirmed_completion = true;
