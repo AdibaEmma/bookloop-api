@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 import { User } from '../users/entities/user.entity';
 import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
@@ -173,7 +174,14 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('No account found for this identifier');
+      // Don't reveal whether an account exists. Return a response shaped like a
+      // successful send; no OTP is stored, so any code the caller enters simply
+      // fails verification the same way a wrong code would.
+      return {
+        message: phone ? 'OTP resent to your phone' : 'OTP resent to your email',
+        reference: `otp_${Date.now()}_${randomBytes(9).toString('hex')}`,
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      };
     }
 
     if (phone) {
@@ -233,12 +241,11 @@ export class AuthService {
       throw new UnauthorizedException('Account not verified');
     }
 
-    if (!user.is_active) {
-      throw new UnauthorizedException('Account is inactive');
-    }
-
-    if (user.is_banned) {
-      throw new UnauthorizedException('Account is banned');
+    // Don't disclose moderation state to an unauthenticated caller — that both
+    // confirms the account exists and leaks its status. A generic message here
+    // avoids enumeration; genuinely affected users are handled via support.
+    if (!user.is_active || user.is_banned) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     // If password is provided, authenticate with password
