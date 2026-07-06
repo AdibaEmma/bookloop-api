@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -303,24 +304,69 @@ export class PaymentsService {
 
     const payment = verificationResult.payment;
 
+    // The reference must belong to the caller — otherwise anyone could upgrade
+    // their account with someone else's payment reference.
+    if (payment.user_id !== userId) {
+      throw new ForbiddenException('This payment does not belong to you');
+    }
+
     if (payment.purpose !== PaymentPurpose.SUBSCRIPTION) {
       throw new BadRequestException('Invalid payment purpose');
+    }
+
+    // A payment upgrades exactly once — a SUCCESS reference must not be replayable
+    // to grant premium repeatedly (or across accounts).
+    if (payment.metadata?.subscription_applied) {
+      throw new BadRequestException('This payment has already been applied');
+    }
+
+    // Entitlement is derived from the amount actually paid, never from the
+    // client-supplied tier. Paying GHS 1 can no longer buy PREMIUM.
+    const plan = this.resolvePlanFromAmount(Number(payment.amount));
+    if (!plan) {
+      throw new BadRequestException('Payment amount does not match any plan');
     }
 
     // Get or create subscription
     const subscription = await this.getOrCreateSubscription(userId);
 
     // Update subscription
-    subscription.tier = dto.tier;
+    subscription.tier = plan.tier;
     subscription.starts_at = new Date();
-    subscription.expires_at = this.calculateExpiryDate(dto.tier);
+    subscription.expires_at = this.calculateExpiryDate(plan.tier, plan.months);
     subscription.is_active = true;
 
     await this.subscriptionRepository.save(subscription);
 
-    this.logger.log(`Upgraded subscription for user ${userId} to ${dto.tier}`);
+    // Mark the payment consumed so its reference can't be replayed.
+    payment.metadata = {
+      ...payment.metadata,
+      subscription_applied: true,
+      applied_at: new Date().toISOString(),
+    };
+    await this.paymentRepository.save(payment);
+
+    this.logger.log(`Upgraded subscription for user ${userId} to ${plan.tier}`);
 
     return subscription;
+  }
+
+  /**
+   * Map a paid amount (GHS) to the plan it buys. Accepts the monthly price or the
+   * yearly price (12 months at a 20% discount) for BASIC/PREMIUM. Returns null when
+   * the amount matches no plan, so an arbitrary amount can't grant entitlement.
+   */
+  private resolvePlanFromAmount(
+    amount: number,
+  ): { tier: SubscriptionTier; months: number } | null {
+    const near = (x: number) => Math.abs(amount - x) < 0.01;
+    for (const tier of [SubscriptionTier.BASIC, SubscriptionTier.PREMIUM]) {
+      const monthly = SUBSCRIPTION_PRICES[tier];
+      if (monthly <= 0) continue;
+      if (near(monthly)) return { tier, months: 1 };
+      if (near(Math.round(monthly * 12 * 0.8))) return { tier, months: 12 };
+    }
+    return null;
   }
 
   /**
@@ -432,14 +478,14 @@ export class PaymentsService {
   /**
    * Calculate subscription expiry date (1 month from now)
    */
-  private calculateExpiryDate(tier: SubscriptionTier): Date {
+  private calculateExpiryDate(tier: SubscriptionTier, months = 1): Date {
     if (tier === SubscriptionTier.FREE) {
       return new Date('2099-12-31');
     }
 
     const now = new Date();
     const expiry = new Date(now);
-    expiry.setMonth(expiry.getMonth() + 1);
+    expiry.setMonth(expiry.getMonth() + months);
     return expiry;
   }
 }
