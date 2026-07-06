@@ -10,6 +10,8 @@ import {
   HttpStatus,
   Headers,
   Req,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import {
@@ -150,13 +152,28 @@ export class PaymentsController {
       return { status: 'error', message: 'Webhook secret not configured' };
     }
 
+    // Verify against the RAW bytes Paystack signed, not a re-serialization of the
+    // parsed body (which won't reproduce key order / spacing).
+    const rawBody = req.rawBody;
+    if (!rawBody) {
+      throw new BadRequestException('Missing raw request body');
+    }
+
     const hash = crypto
       .createHmac('sha512', secret)
-      .update(JSON.stringify(req.body))
+      .update(rawBody)
       .digest('hex');
 
-    if (hash !== signature) {
-      return { status: 'error', message: 'Invalid signature' };
+    const expected = Buffer.from(hash);
+    const provided = Buffer.from(signature ?? '');
+    const valid =
+      expected.length === provided.length &&
+      crypto.timingSafeEqual(expected, provided);
+
+    if (!valid) {
+      // Reject with a non-2xx so a genuinely dropped (but valid) delivery is
+      // retried by Paystack, instead of being silently swallowed with a 200.
+      throw new UnauthorizedException('Invalid signature');
     }
 
     await this.paymentsService.handlePaystackWebhook(req.body);

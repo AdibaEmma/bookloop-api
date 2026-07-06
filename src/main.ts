@@ -17,6 +17,9 @@ if (process.env.SENTRY_DSN) {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    // Preserve the raw request body so webhook signatures (e.g. Paystack) can be
+    // verified against the exact bytes that were signed, not a re-serialization.
+    rawBody: true,
   });
 
   const logger = app.get(LoggerService);
