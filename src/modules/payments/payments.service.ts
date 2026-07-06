@@ -47,7 +47,8 @@ export class PaymentsService {
     if (!paystackSecretKey) {
       this.logger.warn('Paystack secret key not configured. Payment functionality will be limited.');
     } else {
-      this.paystack = new Paystack(paystackSecretKey);
+      // paystack-node's constructor is (secretKey, environment).
+      this.paystack = new Paystack(paystackSecretKey, process.env.NODE_ENV || 'production');
       this.logger.log('Paystack SDK initialized successfully');
     }
   }
@@ -92,21 +93,23 @@ export class PaymentsService {
     await this.paymentRepository.save(payment);
 
     try {
-      // Initialize Paystack transaction
-      const response = await this.paystack.transaction.initialize({
+      // paystack-node exposes flat methods (initializeTransaction), wraps the
+      // Paystack API JSON in `.body`, and expects metadata as a string.
+      const response = await this.paystack.initializeTransaction({
         email,
         amount: Math.round(dto.amount * 100), // Convert to pesewas (kobo)
         reference,
         callback_url: this.configService.get<string>('PAYSTACK_CALLBACK_URL'),
-        metadata: {
+        metadata: JSON.stringify({
           user_id: userId,
           payment_id: payment.id,
           purpose: dto.purpose,
-        },
+        }),
       });
 
-      if (response.status && response.data) {
-        payment.provider_reference = response.data.reference;
+      const result = response?.body;
+      if (result?.status && result.data) {
+        payment.provider_reference = result.data.reference;
         await this.paymentRepository.save(payment);
 
         this.logger.log(`Payment initialized: ${reference} for user ${userId}`);
@@ -114,8 +117,8 @@ export class PaymentsService {
         return {
           payment_id: payment.id,
           reference,
-          authorization_url: response.data.authorization_url,
-          access_code: response.data.access_code,
+          authorization_url: result.data.authorization_url,
+          access_code: result.data.access_code,
         };
       } else {
         payment.status = PaymentStatus.FAILED;
@@ -159,10 +162,11 @@ export class PaymentsService {
     }
 
     try {
-      const response = await this.paystack.transaction.verify({ reference });
+      const response = await this.paystack.verifyTransaction({ reference });
+      const result = response?.body;
 
-      if (response.status && response.data) {
-        const { status, amount } = response.data;
+      if (result?.status && result.data) {
+        const { status, amount } = result.data;
 
         // Update payment status
         if (status === 'success') {
