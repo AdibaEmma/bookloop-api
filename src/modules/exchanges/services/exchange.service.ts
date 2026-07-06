@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -283,22 +284,46 @@ export class ExchangeService {
       throw new ForbiddenException('Only the listing owner can accept');
     }
 
-    // Use state machine for transition
+    // Validate the transition in memory (throws if not pending).
     this.exchangeStateMachine.accept(exchange);
+
+    // Claim the listing ATOMICALLY, before persisting the accept. This is the
+    // concurrency gate: if another exchange already reserved this book, reject
+    // now — otherwise two exchanges could both be saved as 'accepted' for one
+    // listing (the old code saved the accept first, then failed on reserve).
+    const reserved = await this.listingService.tryReserve(exchange.listing_id);
+    if (!reserved) {
+      throw new ConflictException(
+        'This book has already been reserved by another exchange',
+      );
+    }
+
+    // Reserve the offered listing too, rolling back the first if it's gone.
+    if (exchange.offered_listing_id) {
+      const offeredReserved = await this.listingService.tryReserve(
+        exchange.offered_listing_id,
+      );
+      if (!offeredReserved) {
+        await this.listingService.releaseReservation(exchange.listing_id);
+        throw new ConflictException('The offered book is no longer available');
+      }
+    }
 
     // Update response message if provided
     if (response) {
       exchange.owner_response = response;
     }
 
-    await this.exchangeRepository.save(exchange);
-
-    // Mark listing as reserved
-    await this.listingService.markAsReserved(exchange.listing_id);
-
-    // If there's an offered listing, mark it as reserved too
-    if (exchange.offered_listing_id) {
-      await this.listingService.markAsReserved(exchange.offered_listing_id);
+    try {
+      await this.exchangeRepository.save(exchange);
+    } catch (err) {
+      // Persisting the accept failed — release the reservations we just claimed
+      // so the listings don't get stuck.
+      await this.listingService.releaseReservation(exchange.listing_id);
+      if (exchange.offered_listing_id) {
+        await this.listingService.releaseReservation(exchange.offered_listing_id);
+      }
+      throw err;
     }
 
     const updatedExchange = await this.findById(exchangeId);

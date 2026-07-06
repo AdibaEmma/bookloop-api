@@ -375,6 +375,28 @@ export class ListingService {
   }
 
   /**
+   * Atomically reserve a listing only if it is still available. A single
+   * conditional UPDATE is the concurrency gate: of two exchanges racing to
+   * accept the same book, exactly one gets `affected > 0`. Returns whether the
+   * reservation was claimed.
+   */
+  async tryReserve(listingId: string): Promise<boolean> {
+    const result = await this.listingRepository.update(
+      { id: listingId, status: 'available' },
+      { status: 'reserved' },
+    );
+    return (result.affected ?? 0) > 0;
+  }
+
+  /** Compensating action: release a reservation back to available. */
+  async releaseReservation(listingId: string): Promise<void> {
+    await this.listingRepository.update(
+      { id: listingId, status: 'reserved' },
+      { status: 'available' },
+    );
+  }
+
+  /**
    * Mark listing as exchanged
    *
    * @param listingId - Listing ID

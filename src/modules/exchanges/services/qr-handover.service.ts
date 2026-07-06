@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Exchange } from '../entities/exchange.entity';
 import { ExchangeService } from './exchange.service';
+import { ListingService } from '../../listings/services/listing.service';
 
 /**
  * QR Handover Service
@@ -52,6 +53,7 @@ export class QRHandoverService {
     @InjectRepository(Exchange)
     private readonly exchangeRepository: Repository<Exchange>,
     private readonly exchangeService: ExchangeService,
+    private readonly listingService: ListingService,
   ) {}
 
   /**
@@ -126,6 +128,12 @@ export class QRHandoverService {
       throw new ForbiddenException('You are not part of this exchange');
     }
 
+    // Only an accepted exchange can be handed over. Guarding here prevents an
+    // already-completed or cancelled exchange from being re-driven to completed.
+    if (exchange.status !== 'accepted') {
+      throw new BadRequestException('This exchange is not ready for handover');
+    }
+
     // Validate QR code
     const qrData = qrCodeStore.get(qrCode);
 
@@ -157,6 +165,13 @@ export class QRHandoverService {
     exchange.completed_at = new Date();
 
     const savedExchange = await this.exchangeRepository.save(exchange);
+
+    // Move the book(s) reserved → exchanged, so the listing isn't stuck
+    // 'reserved' forever after a handover (the old code skipped this entirely).
+    await this.listingService.markAsExchanged(exchange.listing_id);
+    if (exchange.offered_listing_id) {
+      await this.listingService.markAsExchanged(exchange.offered_listing_id);
+    }
 
     return this.exchangeService.findById(savedExchange.id);
   }
