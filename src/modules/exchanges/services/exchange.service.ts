@@ -169,7 +169,7 @@ export class ExchangeService {
    * @returns Exchange entity with properly formatted meetup_location
    * @throws NotFoundException if not found
    */
-  async findById(exchangeId: string): Promise<Exchange> {
+  async findById(exchangeId: string, requesterId?: string): Promise<Exchange> {
     // Use query builder to properly transform geography to GeoJSON
     const exchange = await this.exchangeRepository
       .createQueryBuilder('exchange')
@@ -192,6 +192,17 @@ export class ExchangeService {
     }
 
     const result = exchange.entities[0];
+
+    // Only the two participants may read an exchange — it exposes meetup
+    // addresses/times and private messages. (requesterId is omitted by internal
+    // callers, which are already scoped server-side.)
+    if (
+      requesterId &&
+      result.owner_id !== requesterId &&
+      result.requester_id !== requesterId
+    ) {
+      throw new ForbiddenException('You are not part of this exchange');
+    }
 
     // Transform meetup_location from raw GeoJSON if available
     if (exchange.raw[0]?.exchange_meetup_location_geojson) {

@@ -92,6 +92,33 @@ export class ExchangesController {
   }
 
   /**
+   * Get exchange statistics for the current user.
+   * NOTE: must be declared before `@Get(':id')` — a bare `stats` segment would
+   * otherwise be captured by the `:id` param and 404.
+   */
+  @Get('stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get exchange statistics for current user' })
+  @ApiResponse({ status: 200, description: 'Exchange stats retrieved' })
+  async getStats(@CurrentUser() user: User) {
+    const [all, completed, pendingAsRequester, pendingAsOwner, ratingStats] = await Promise.all([
+      this.exchangeService.findByUser(user.id),
+      this.exchangeService.findByUser(user.id, undefined, 'completed'),
+      this.exchangeService.findByUser(user.id, 'requester', 'pending'),
+      this.exchangeService.findByUser(user.id, 'owner', 'pending'),
+      this.ratingService.getRatingStats(user.id),
+    ]);
+
+    return {
+      totalExchanges: all.length,
+      completedExchanges: completed.length,
+      pendingRequests: pendingAsRequester.length,
+      incomingRequests: pendingAsOwner.length,
+      averageRating: Number((ratingStats.average_rating || 5.0).toFixed(1)),
+    };
+  }
+
+  /**
    * Get exchange by ID
    */
   @Get(':id')
@@ -99,8 +126,8 @@ export class ExchangesController {
   @ApiOperation({ summary: 'Get exchange by ID' })
   @ApiResponse({ status: 200, description: 'Exchange retrieved' })
   @ApiResponse({ status: 404, description: 'Exchange not found' })
-  async findById(@Param('id') id: string) {
-    return this.exchangeService.findById(id);
+  async findById(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.exchangeService.findById(id, user.id);
   }
 
   /**
@@ -237,31 +264,6 @@ export class ExchangesController {
     @Query('status') status?: string,
   ) {
     return this.exchangeService.findByUser(user.id, undefined, status);
-  }
-
-  /**
-   * Get exchange statistics
-   */
-  @Get('stats')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get exchange statistics for current user' })
-  @ApiResponse({ status: 200, description: 'Exchange stats retrieved' })
-  async getStats(@CurrentUser() user: User) {
-    const [all, completed, pendingAsRequester, pendingAsOwner, ratingStats] = await Promise.all([
-      this.exchangeService.findByUser(user.id),
-      this.exchangeService.findByUser(user.id, undefined, 'completed'),
-      this.exchangeService.findByUser(user.id, 'requester', 'pending'),
-      this.exchangeService.findByUser(user.id, 'owner', 'pending'),
-      this.ratingService.getRatingStats(user.id),
-    ]);
-
-    return {
-      totalExchanges: all.length,
-      completedExchanges: completed.length,
-      pendingRequests: pendingAsRequester.length,
-      incomingRequests: pendingAsOwner.length,
-      averageRating: Number((ratingStats.average_rating || 5.0).toFixed(1)),
-    };
   }
 
   /**
