@@ -11,7 +11,7 @@ import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomBytes } from 'node:crypto';
 import { LoggerService } from '../../common/logger/logger.service';
 import { OtpVerification } from './entities/otp-verification.entity';
 import { OtpEmailJob } from '../../common/queues/otp-email.processor';
@@ -77,8 +77,8 @@ export class OtpService {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + this.otpExpiryMinutes);
 
-    // Generate reference
-    const reference = `otp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate unique, unguessable reference (Math.random is predictable).
+    const reference = `otp_${Date.now()}_${randomBytes(9).toString('hex')}`;
 
     try {
       // Save OTP to database. The `email` column doubles as a generic

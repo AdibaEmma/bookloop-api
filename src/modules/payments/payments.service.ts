@@ -14,6 +14,7 @@ import { Subscription, SubscriptionTier } from './entities/subscription.entity';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto';
 import { LoggerService } from '../../common/logger/logger.service';
+import { randomBytes } from 'node:crypto';
 
 // Subscription pricing in GHS (Ghana Cedis)
 const SUBSCRIPTION_PRICES = {
@@ -68,8 +69,8 @@ export class PaymentsService {
       throw new BadRequestException('subscription_id is required for subscription payments');
     }
 
-    // Generate unique reference
-    const reference = `BL_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate unique, unguessable reference (Math.random is predictable).
+    const reference = `BL_${Date.now()}_${randomBytes(9).toString('hex')}`;
 
     // Create payment record
     const payment = this.paymentRepository.create({

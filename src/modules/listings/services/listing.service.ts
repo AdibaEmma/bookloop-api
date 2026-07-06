@@ -221,11 +221,14 @@ export class ListingService {
         );
       }
 
-      // Validate allowed transitions
+      // Validate allowed OWNER-initiated transitions. 'reserved' and 'exchanged'
+      // are driven only by the exchange flow (which writes the listing directly
+      // and bypasses this path) — an owner must not be able to mark their own
+      // book reserved/exchanged without a real exchange.
       const allowedTransitions: Record<string, string[]> = {
         draft: ['available', 'cancelled'],
-        available: ['draft', 'reserved', 'cancelled', 'exchanged'],
-        reserved: ['available', 'draft', 'exchanged', 'cancelled'],
+        available: ['draft', 'cancelled'],
+        reserved: ['available', 'draft', 'cancelled'],
         expired: ['available', 'draft', 'cancelled'],
       };
 
