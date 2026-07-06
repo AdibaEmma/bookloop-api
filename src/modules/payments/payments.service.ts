@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import Paystack from 'paystack-node';
 import { Payment, PaymentStatus, PaymentProvider, PaymentPurpose } from './entities/payment.entity';
 import { Subscription, SubscriptionTier } from './entities/subscription.entity';
+import { User } from '../users/entities/user.entity';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto';
 import { LoggerService } from '../../common/logger/logger.service';
@@ -360,6 +361,14 @@ export class PaymentsService {
 
     await this.subscriptionRepository.save(subscription);
 
+    // Keep the denormalized user.subscription_tier column in sync — that's what
+    // /auth/me and the profile screen read.
+    await this.subscriptionRepository.manager.update(
+      User,
+      { id: userId },
+      { subscription_tier: plan.tier },
+    );
+
     // Mark the payment consumed so its reference can't be replayed.
     payment.metadata = {
       ...payment.metadata,
@@ -409,6 +418,11 @@ export class PaymentsService {
     subscription.expires_at = new Date('2099-12-31');
 
     await this.subscriptionRepository.save(subscription);
+    await this.subscriptionRepository.manager.update(
+      User,
+      { id: userId },
+      { subscription_tier: SubscriptionTier.FREE },
+    );
 
     this.logger.log(`Cancelled subscription for user ${userId}`);
 
