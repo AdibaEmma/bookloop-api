@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, QueryFailedError } from 'typeorm';
 import { Rating } from '../entities/rating.entity';
 import { Exchange } from '../entities/exchange.entity';
 import { UserService } from '../../users/services/user.service';
@@ -134,7 +134,20 @@ export class RatingService {
       is_visible: bothRated, // Visible immediately if both rated
     });
 
-    await this.ratingRepository.save(rating);
+    try {
+      await this.ratingRepository.save(rating);
+    } catch (err) {
+      // The (exchange_id, rater_id, rated_user_id) unique constraint catches a
+      // concurrent double-submit that slipped past the check above — surface it
+      // as the same clean message instead of a 500.
+      if (
+        err instanceof QueryFailedError &&
+        (err as any).driverError?.code === '23505'
+      ) {
+        throw new BadRequestException('You have already rated this exchange');
+      }
+      throw err;
+    }
 
     // If both parties have rated, make other rating visible too
     if (bothRated && otherPartyRating) {
