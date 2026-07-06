@@ -11,6 +11,7 @@ import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
+import { randomInt } from 'node:crypto';
 import { LoggerService } from '../../common/logger/logger.service';
 import { OtpVerification } from './entities/otp-verification.entity';
 import { OtpEmailJob } from '../../common/queues/otp-email.processor';
@@ -149,11 +150,13 @@ export class OtpService {
    * Verify OTP code
    */
   async verifyOTP(email: string, code: string): Promise<boolean> {
-    // Find the most recent OTP for this email
+    // Look up the latest unverified OTP for this identifier — NOT filtered by the
+    // submitted code. Filtering by code meant a wrong guess matched no row and
+    // returned before attempts were counted, so the lockout never fired and the
+    // code was brute-forceable.
     const otp = await this.otpRepository.findOne({
       where: {
         email,
-        code,
         verified: false,
       },
       order: {
@@ -177,14 +180,15 @@ export class OtpService {
       );
     }
 
-    // Increment attempts
+    // Count this attempt BEFORE comparing the code, so every wrong guess burns
+    // the attempt budget and the lockout actually engages.
     otp.attempts += 1;
     await this.otpRepository.save(otp);
 
     // Verify code
     if (otp.code !== code) {
       throw new UnauthorizedException(
-        `Invalid OTP. ${this.maxAttempts - otp.attempts} attempts remaining.`,
+        `Invalid OTP. ${Math.max(0, this.maxAttempts - otp.attempts)} attempts remaining.`,
       );
     }
 
@@ -250,14 +254,15 @@ export class OtpService {
     );
 
     if (useAlphanumeric === 'true') {
-      // Generate 6-character alphanumeric code
-      return Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase();
+      // Generate 6-character alphanumeric code with a CSPRNG (Math.random is not
+      // cryptographically secure and is predictable).
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let out = '';
+      for (let i = 0; i < 6; i++) out += chars[randomInt(0, chars.length)];
+      return out;
     } else {
-      // Generate 6-digit numeric code
-      return Math.floor(100000 + Math.random() * 900000).toString();
+      // Generate a 6-digit numeric code across the full 000000–999999 space.
+      return randomInt(0, 1_000_000).toString().padStart(6, '0');
     }
   }
 
