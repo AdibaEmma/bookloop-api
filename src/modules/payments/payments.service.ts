@@ -165,15 +165,19 @@ export class PaymentsService {
 
         // Update payment status
         if (status === 'success') {
-          payment.status = PaymentStatus.SUCCESS;
-          payment.verified_at = new Date();
-
-          // Verify amount matches
+          // The amount Paystack confirms must match what we asked for. A mismatch
+          // (under/over-payment or a tampered amount) must NOT be marked SUCCESS —
+          // otherwise it could be used to claim an entitlement it didn't pay for.
           const expectedAmount = Math.round(payment.amount * 100);
           if (amount !== expectedAmount) {
+            payment.status = PaymentStatus.FAILED;
+            payment.failure_reason = `Amount mismatch: expected ${expectedAmount}, got ${amount}`;
             this.logger.warn(
-              `Payment amount mismatch: expected ${expectedAmount}, got ${amount}`,
+              `Payment amount mismatch for ${reference}: expected ${expectedAmount}, got ${amount}`,
             );
+          } else {
+            payment.status = PaymentStatus.SUCCESS;
+            payment.verified_at = new Date();
           }
         } else {
           payment.status = PaymentStatus.FAILED;
@@ -219,6 +223,19 @@ export class PaymentsService {
       }
 
       if (payment.status !== PaymentStatus.SUCCESS) {
+        // Same amount guard as verifyPayment — don't mark SUCCESS on a mismatch.
+        const expectedAmount = Math.round(payment.amount * 100);
+        if (typeof data.amount === 'number' && data.amount !== expectedAmount) {
+          payment.status = PaymentStatus.FAILED;
+          payment.failure_reason = `Amount mismatch: expected ${expectedAmount}, got ${data.amount}`;
+          payment.metadata = { ...payment.metadata, webhook_data: data };
+          await this.paymentRepository.save(payment);
+          this.logger.warn(
+            `Webhook amount mismatch for ${reference}: expected ${expectedAmount}, got ${data.amount}`,
+          );
+          return;
+        }
+
         payment.status = PaymentStatus.SUCCESS;
         payment.verified_at = new Date();
         payment.metadata = { ...payment.metadata, webhook_data: data };
