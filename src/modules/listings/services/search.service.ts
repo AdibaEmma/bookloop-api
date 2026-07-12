@@ -154,8 +154,11 @@ export class SearchService {
       if (!queryBuilder.expressionMap.aliases.find((a: any) => a.name === 'book')) {
         queryBuilder = queryBuilder.leftJoinAndSelect('listing.book', 'book');
       }
-      queryBuilder = queryBuilder.andWhere('book.genre = :genre', {
-        genre: criteria.genre,
+      // Partial, case-insensitive match: stored genres are specific labels
+      // ("Contemporary Fiction", "Historical Fiction"), while clients filter
+      // by broad category ("Fiction") — exact equality would miss them.
+      queryBuilder = queryBuilder.andWhere('book.genre ILIKE :genre', {
+        genre: `%${criteria.genre}%`,
       });
     }
 
