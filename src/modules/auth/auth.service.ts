@@ -328,9 +328,13 @@ export class AuthService {
         throw new UnauthorizedException('Invalid token type');
       }
 
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
-      });
+      // refresh_token is select:false on the entity — opt in explicitly for
+      // the rotation check.
+      const user = await this.userRepository
+        .createQueryBuilder('user')
+        .addSelect('user.refresh_token')
+        .where('user.id = :id', { id: payload.sub })
+        .getOne();
 
       if (!user || user.refresh_token !== refreshToken) {
         throw new UnauthorizedException('Invalid refresh token');

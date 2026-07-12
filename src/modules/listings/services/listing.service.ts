@@ -11,6 +11,7 @@ import type { Point } from 'geojson';
 import { Listing } from '../entities/listing.entity';
 import { BookService } from '../../books/services/book.service';
 import type { IImageUploadService } from '../../users/interfaces/image-upload.interface';
+import { publicUserFields } from '../../users/constants/public-user-fields';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -120,10 +121,15 @@ export class ListingService {
     listingId: string,
     incrementView: boolean = false,
   ): Promise<Listing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id: listingId },
-      relations: ['user', 'book'],
-    });
+    // Public endpoint — join only the owner's public profile fields, never
+    // the full user entity (credentials/PII).
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.user', 'user')
+      .addSelect(publicUserFields('user'))
+      .leftJoinAndSelect('listing.book', 'book')
+      .where('listing.id = :listingId', { listingId })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${listingId} not found`);

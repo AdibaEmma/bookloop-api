@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Listing } from '../entities/listing.entity';
+import { publicUserFields } from '../../users/constants/public-user-fields';
 import {
   ISearchStrategy,
   SearchCriteria,
@@ -70,10 +71,13 @@ export class SearchService {
     const limit = Math.min(criteria.limit || 20, 100);
     const offset = criteria.offset || 0;
 
-    // Build base query
+    // Build base query. The owner join is limited to the public profile
+    // projection — this endpoint is unauthenticated, so a full-entity join
+    // would hand out credentials and PII.
     let queryBuilder = this.listingRepository
       .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.user', 'user')
+      .leftJoin('listing.user', 'user')
+      .addSelect(publicUserFields('user'))
       .leftJoinAndSelect('listing.book', 'book');
 
     // Select appropriate strategy

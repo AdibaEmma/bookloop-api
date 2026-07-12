@@ -129,8 +129,9 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   last_login_at: Date;
 
-  // Authentication
-  @Column({ type: 'text', nullable: true })
+  // Authentication — `select: false` keeps the credential out of every query
+  // (and therefore every API response) unless explicitly addSelect-ed.
+  @Column({ type: 'text', nullable: true, select: false })
   refresh_token: string | null;
 
   @OneToMany(() => UserRole, (userRole) => userRole.user)
