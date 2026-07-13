@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 import { Notification, NotificationType } from '../entities/notification.entity';
 import { UserDevice } from '../entities/user-device.entity';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
@@ -73,6 +73,23 @@ export class NotificationsService {
     }
 
     await this.userDeviceRepository.save(device);
+
+    // A reinstall (or re-signed build) mints a NEW push token for the same
+    // physical device while the old row stays active — every push then
+    // delivers twice. Retire this user's other tokens for the same named
+    // device; genuinely different devices keep their own rows.
+    if (dto.device_name) {
+      await this.userDeviceRepository.update(
+        {
+          user_id: userId,
+          device_type: dto.device_type,
+          device_name: dto.device_name,
+          device_token: Not(dto.fcm_token),
+          is_active: true,
+        },
+        { is_active: false },
+      );
+    }
 
     return {
       message: 'Device registered successfully',
