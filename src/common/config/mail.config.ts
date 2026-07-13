@@ -8,55 +8,46 @@ export class MailConfig {
     const fromEmail =
       configService.get<string>('SMTP_FROM_EMAIL') || 'noreply@bookloop.com';
 
-    if (nodeEnv === 'production') {
-      // SendGrid configuration for production
-      return {
-        transport: {
-          host: 'smtp.sendgrid.net',
-          port: 587,
-          secure: false,
-          auth: {
-            user: 'apikey',
-            pass: configService.getOrThrow<string>('SENDGRID_API_KEY'),
-          },
-        },
-        defaults: {
-          from: `"${fromName}" <${fromEmail}>`,
-        },
-        template: {
-          dir: path.join(__dirname, '..', 'mails', 'templates'),
-          adapter: new HandlebarsAdapter(),
-          options: {
-            strict: true,
-          },
-        },
-      };
-    } else {
-      // Mailtrap configuration for development/testing
-      return {
-        transport: {
-          host:
-            configService.get<string>('SMTP_HOST') ||
-            'sandbox.smtp.mailtrap.io',
-          port: parseInt(configService.get<string>('SMTP_PORT') || '2525'),
-          secure: false,
-          auth: {
-            user: configService.getOrThrow<string>('SMTP_USER'),
-            pass: configService.getOrThrow<string>('SMTP_PASSWORD'),
-          },
-        },
-        defaults: {
-          from: `"${fromName}" <${fromEmail}>`,
-        },
-        template: {
-          dir: path.join(__dirname, '..', 'mails', 'templates'),
-          adapter: new HandlebarsAdapter(),
-          options: {
-            strict: true,
-          },
-        },
-      };
+    // One env-driven transport for every environment. Dev defaults to
+    // Mailtrap's sandbox; production must be configured explicitly with any
+    // SMTP relay (Resend, SendGrid, SES...). SENDGRID_API_KEY remains an
+    // accepted alias: it implies SendGrid's fixed host and "apikey" user.
+    const sendgridKey = configService.get<string>('SENDGRID_API_KEY');
+    const host =
+      configService.get<string>('SMTP_HOST') ||
+      (sendgridKey ? 'smtp.sendgrid.net' : 'sandbox.smtp.mailtrap.io');
+    const port = parseInt(
+      configService.get<string>('SMTP_PORT') || (sendgridKey ? '587' : '2525'),
+    );
+    const user =
+      configService.get<string>('SMTP_USER') || (sendgridKey ? 'apikey' : undefined);
+    const pass = configService.get<string>('SMTP_PASSWORD') || sendgridKey;
+
+    if (nodeEnv === 'production' && (!user || !pass)) {
+      // Fail loud and actionable — but only when mail is truly unconfigured.
+      throw new Error(
+        'Mail transport not configured: set SMTP_HOST/SMTP_USER/SMTP_PASSWORD (or SENDGRID_API_KEY) in the environment.',
+      );
     }
+
+    return {
+      transport: {
+        host,
+        port,
+        secure: port === 465,
+        auth: user && pass ? { user, pass } : undefined,
+      },
+      defaults: {
+        from: `"${fromName}" <${fromEmail}>`,
+      },
+      template: {
+        dir: path.join(__dirname, '..', 'mails', 'templates'),
+        adapter: new HandlebarsAdapter(),
+        options: {
+          strict: true,
+        },
+      },
+    };
   }
 
   static getFromAddress(configService?: ConfigService): string {
