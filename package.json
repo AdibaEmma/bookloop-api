@@ -26,7 +26,7 @@
     "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/admin-seed.ts"
   },
   "dependencies": {
-    "@nestjs-modules/mailer": "^2.0.2",
+    "@nestjs-modules/mailer": "2.0.2",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.1.7",
