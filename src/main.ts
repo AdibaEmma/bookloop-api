@@ -68,7 +68,9 @@ async function bootstrap() {
   SwaggerModule.setup('api/v1/docs', app as any, document);
 
   const port = process.env.PORT || 8000;
-  await app.listen(port);
+  // Bind dual-stack ('::') — Railway's healthcheck probes over private IPv6
+  // and can't reach an IPv4-only listener.
+  await app.listen(port, '::');
 
   logger.log(`BookLoop API running on http://localhost:${port}`, 'Bootstrap');
   logger.log(
