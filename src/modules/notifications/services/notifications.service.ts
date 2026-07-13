@@ -6,6 +6,7 @@ import { UserDevice } from '../entities/user-device.entity';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
 import { FCMService } from './fcm.service';
+import { ExpoPushService, PushBatchResult } from './expo-push.service';
 import { LoggerService } from '../../../common/logger/logger.service';
 
 /**
@@ -33,6 +34,7 @@ export class NotificationsService {
     @InjectRepository(UserDevice)
     private userDeviceRepository: Repository<UserDevice>,
     private fcmService: FCMService,
+    private expoPushService: ExpoPushService,
     private logger: LoggerService,
   ) {}
 
@@ -121,6 +123,34 @@ export class NotificationsService {
   // Push Notifications
   // ============================================
 
+
+  /**
+   * Route tokens to the right transport: Expo tokens go through Expo's push
+   * API (FCM rejects them); anything else goes to FCM directly.
+   */
+  private async dispatchPush(
+    tokens: string[],
+    message: { title: string; body: string; data?: Record<string, string> },
+  ): Promise<PushBatchResult> {
+    const expoTokens = tokens.filter((t) => ExpoPushService.isExpoToken(t));
+    const fcmTokens = tokens.filter((t) => !ExpoPushService.isExpoToken(t));
+
+    const results = await Promise.all([
+      expoTokens.length
+        ? this.expoPushService.sendToMultipleTokens(expoTokens, message)
+        : Promise.resolve({ success: 0, failed: 0, invalidTokens: [] }),
+      fcmTokens.length
+        ? this.fcmService.sendToMultipleTokens(fcmTokens, message)
+        : Promise.resolve({ success: 0, failed: 0, invalidTokens: [] }),
+    ]);
+
+    return {
+      success: results[0].success + results[1].success,
+      failed: results[0].failed + results[1].failed,
+      invalidTokens: [...results[0].invalidTokens, ...results[1].invalidTokens],
+    };
+  }
+
   /**
    * Send push notification to a specific user
    */
@@ -145,7 +175,7 @@ export class NotificationsService {
     // Convert data to string map (FCM requirement)
     const stringData = data ? this.stringifyData(data) : undefined;
 
-    const result = await this.fcmService.sendToMultipleTokens(tokens, {
+    const result = await this.dispatchPush(tokens, {
       title,
       body,
       data: stringData,
@@ -184,7 +214,7 @@ export class NotificationsService {
     const tokens = devices.map((d) => d.device_token);
     const stringData = data ? this.stringifyData(data) : undefined;
 
-    const result = await this.fcmService.sendToMultipleTokens(tokens, {
+    const result = await this.dispatchPush(tokens, {
       title,
       body,
       data: stringData,
