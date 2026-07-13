@@ -1,6 +1,12 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddDraftStatusToListings1762685537000 implements MigrationInterface {
+  // PostgreSQL (55P04) forbids using a newly-added enum value in the same
+  // transaction that added it — and TypeORM batches pending migrations into
+  // one transaction by default. ADD VALUE must commit on its own before the
+  // next migration sets 'draft' as the column default.
+  transaction = false as const;
+
     name = 'AddDraftStatusToListings1762685537000'
 
     public async up(queryRunner: QueryRunner): Promise<void> {

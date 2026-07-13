@@ -20,6 +20,7 @@ import { join } from 'path';
         logger: 'advanced-console' as const,
         synchronize: configService.get('DB_SYNCHRONIZE') === 'true',
         migrationsRun: configService.get('RUN_MIGRATIONS') === 'true',
+        migrationsTransactionMode: 'each' as const,
         entities: [join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}')],
         migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],
         namingStrategy: new SnakeNamingStrategy(),

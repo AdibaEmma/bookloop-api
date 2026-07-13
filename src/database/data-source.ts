@@ -22,6 +22,7 @@ export const AppDataSource = new DataSource({
   logging: process.env.DB_LOGGING === 'true',
   logger: 'advanced-console',
   synchronize: process.env.DB_SYNCHRONIZE === 'true',
+  migrationsTransactionMode: 'each',
   migrationsRun: process.env.RUN_MIGRATIONS === 'true',
   entities: [join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}')],
   migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],
