@@ -340,8 +340,23 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      const tokens = await this.generateTokens(user);
-      return tokens;
+      // Mint a fresh ACCESS token only — the refresh token stays stable until
+      // login or logout. Rotating it here meant any concurrent refresh (two
+      // 401s at once, a retried request after a network blip) invalidated the
+      // session, and every stored copy (biometric login) went stale with it.
+      const accessToken = this.jwtService.sign(
+        { sub: user.id, email: user.email, type: 'access' } satisfies JwtPayload,
+        {
+          secret: this.configService.getOrThrow<string>('JWT_ACCESS_TOKEN_SECRET'),
+          expiresIn: (this.configService.get<string>('JWT_ACCESS_TOKEN_EXPIRY') || '15m') as any,
+        },
+      );
+
+      return {
+        access_token: accessToken,
+        token_type: 'Bearer',
+        expires_in: 900,
+      };
     } catch (error) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
